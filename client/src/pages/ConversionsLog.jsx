@@ -635,6 +635,7 @@ export default function ConversionsLog() {
 
       {addModal && (
         <Modal
+          compact
           title="Add conversions"
           onClose={() => setAddModal(null)}
           footer={
@@ -648,35 +649,19 @@ export default function ConversionsLog() {
             </>
           }
         >
-          <p style={{ marginTop: 0 }}>Please add click id and payout amount separated by comma, one per line</p>
+          {/* Deliberately just the paste box. Type and status keep their defaults
+              (lead / approved) and are editable afterwards from the table. */}
+          <p style={{ marginTop: 0, marginBottom: 12 }}>
+            Please add click id and payout amount separated by comma, one per line
+          </p>
           <textarea
             className="mono"
-            style={{ minHeight: 150 }}
+            style={{ minHeight: 132 }}
             value={addModal.text}
             onChange={(e) => setAddModal({ ...addModal, text: e.target.value })}
             placeholder={'Example:\nWkmeTq5Bb4DJ,\n3waNKXmGjVAc, 5'}
           />
-          <div className="field-row" style={{ marginTop: 14 }}>
-            <Field label="Type">
-              <select value={addModal.type} onChange={(e) => setAddModal({ ...addModal, type: e.target.value })}>
-                {TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Status">
-              <select value={addModal.status} onChange={(e) => setAddModal({ ...addModal, status: e.target.value })}>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          <div className="rt-hint">
+          <div className="rt-hint" style={{ marginTop: 8 }}>
             A blank payout falls back to the offer&apos;s default when its payout type is fixed.
           </div>
         </Modal>
