@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>KAP Tracker — demo lander</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #0b0f17;
+        color: #e6edf7;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        padding: 24px;
+      }
+      .card {
+        max-width: 620px;
+        background: #141b2a;
+        border: 1px solid #223049;
+        border-radius: 12px;
+        padding: 28px;
+      }
+      h1 { margin: 0 0 6px; font-size: 20px; }
+      p { color: #8fa3bf; line-height: 1.6; }
+      code, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+      .cta {
+        display: inline-block;
+        margin-top: 14px;
+        background: #4f9dff;
+        color: #04121f;
+        font-weight: 600;
+        padding: 11px 20px;
+        border-radius: 8px;
+        text-decoration: none;
+      }
+      .out {
+        margin-top: 18px;
+        padding: 12px;
+        background: #0f1420;
+        border: 1px solid #223049;
+        border-radius: 8px;
+        word-break: break-all;
+        color: #35d07f;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Demo lander</h1>
+      <p>
+        This page exists to test the no-redirect tracking script. The URL in the address bar never changes — the visit is
+        registered server-side and the CTA below is rewritten to route through <code>/go</code>.
+      </p>
+
+      <!-- data-kap-go marks any link the script should rewrite into a /go click-through -->
+      <a class="cta" href="#" data-kap-go>Continue to offer →</a>
+
+      <div class="out">
+        clickid: <span id="cid" class="mono">waiting…</span><br />
+        cta href: <span id="href" class="mono">—</span>
+      </div>
+    </div>
+
+    <!-- Point data-kcmp at the campaign slug you want to attribute this page to -->
+    <script src="/track.js" data-kcmp="demo-campaign"></script>
+    <script>
+      // Small readout so a human (or a test) can see what the script did.
+      var tries = 0;
+      var timer = setInterval(function () {
+        tries += 1;
+        if (window.KAP_CLICKID) {
+          document.getElementById('cid').textContent = window.KAP_CLICKID;
+          document.getElementById('href').textContent = document.querySelector('[data-kap-go]').getAttribute('href');
+          clearInterval(timer);
+        } else if (tries > 40) {
+          document.getElementById('cid').textContent = 'no clickid — check the campaign slug and the browser console';
+          clearInterval(timer);
+        }
+      }, 100);
+    </script>
+  </body>
+</html>

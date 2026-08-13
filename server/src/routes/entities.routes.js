@@ -1,0 +1,986 @@
+import express from 'express';
+import crudRouter from './crudFactory.js';
+import TrafficSource, { PARAM_ROLES } from '../models/TrafficSource.js';
+import { catalogSummary, getCatalogEntry } from '../services/sourceCatalog.service.js';
+import AffiliateNetwork, { POSTBACK_ROLES, DUPLICATE_MODES } from '../models/AffiliateNetwork.js';
+import { networkCatalogSummary, getNetworkTemplate } from '../services/networkCatalog.service.js';
+import Offer from '../models/Offer.js';
+import Lander, { LANDER_TYPES } from '../models/Lander.js';
+import FunnelTemplate, { FUNNEL_TYPES } from '../models/FunnelTemplate.js';
+import Domain from '../models/Domain.js';
+import Campaign from '../models/Campaign.js';
+import config from '../config/env.js';
+import { asyncRoute } from '../middleware/error.js';
+import { refreshCache, getNetworkById } from '../services/cache.service.js';
+import { refreshCaps, capUsage, capStatus } from '../services/caps.service.js';
+import { runReport } from '../services/report.service.js';
+import { getSettingsSync } from '../services/settings.service.js';
+import { parseRange } from '../utils/time.js';
+import { newSecurityKey, slugify } from '../utils/ids.js';
+import { badRequest, isHttpUrl, isObjectId, str, notFound } from '../utils/validate.js';
+import { MACRO_LIST } from '../services/macro.service.js';
+
+const router = express.Router();
+
+/* --------------------------------------------------------- traffic sources */
+
+/**
+ * `params` is the editable list. `tokens` and `paramTemplate` are derived from it
+ * so the campaign tracking-link builder keeps working without knowing about roles.
+ */
+const normalizeSource = async (body) => {
+  if (!str(body.name)) throw badRequest('Name is required');
+  body.slug = body.slug ? slugify(body.slug) : slugify(body.name);
+
+  if (Array.isArray(body.params)) {
+    const seen = new Set();
+    body.params = body.params
+      .map((p) => ({
+        param: str(p?.param, 60),
+        macro: str(p?.macro, 200),
+        name: str(p?.name, 80),
+        role: PARAM_ROLES.includes(p?.role) ? p.role : '',
+      }))
+      .filter((p) => {
+        if (!p.param || seen.has(p.param)) return false;
+        seen.add(p.param);
+        return true;
+      });
+
+    const tokens = {};
+    for (const p of body.params) if (p.macro) tokens[p.param] = p.macro;
+    body.tokens = tokens;
+    body.paramTemplate = Object.entries(tokens)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('&');
+
+    // Keep the shorthand fields in step with the roles
+    const costRole = body.params.find((p) => p.role === 'cost');
+    if (costRole) body.costParam = costRole.param;
+    const refRole = body.params.find((p) => p.role === 'clickref');
+    if (refRole) body.clickIdParam = refRole.param;
+  }
+
+  return body;
+};
+
+/* Catalog of prebuilt channels for "New from template" */
+router.get('/sources/catalog', (req, res) => {
+  res.json({ items: catalogSummary(), roles: PARAM_ROLES });
+});
+
+router.post(
+  '/sources/from-template',
+  asyncRoute(async (req, res) => {
+    const entry = getCatalogEntry(str(req.body?.templateId, 40));
+    if (!entry) throw badRequest('Unknown template');
+
+    const name = str(req.body?.name, 120) || entry.name;
+    const body = await normalizeSource({
+      name,
+      notes: entry.description,
+      status: 'active',
+      ...entry.template,
+    });
+
+    const created = await TrafficSource.create(body);
+    await refreshCache();
+    res.status(201).json(created.toObject());
+  })
+);
+
+/* Sources table: channels joined with their metrics for the selected range */
+router.get(
+  '/sources/table',
+  asyncRoute(async (req, res) => {
+    const q = {};
+    if (req.query.title) {
+      q.name = new RegExp(String(req.query.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    }
+    if (req.query.status && req.query.status !== 'all') q.status = String(req.query.status);
+    if (req.query.connectedFrom || req.query.connectedTo) {
+      const tz = getSettingsSync().reportTimezone;
+      const range = parseRange(req.query.connectedFrom, req.query.connectedTo, tz);
+      q.createdAt = { $gte: range.utcFrom, $lte: range.utcTo };
+    }
+
+    const [sources, report] = await Promise.all([
+      TrafficSource.find(q).sort({ createdAt: -1 }).lean(),
+      runReport({
+        groupBy: 'source',
+        from: req.query.from,
+        to: req.query.to,
+        includeBots: req.query.includeBots,
+        limit: 5000,
+      }),
+    ]);
+
+    // The source dimension is keyed by the name snapshot stored on the click
+    const stats = new Map(report.rows.map((r) => [r.key, r]));
+    const zero = {
+      clicks: 0, uniques: 0, lpClicks: 0, lpCtr: 0, conversions: 0, cr: 0,
+      revenue: 0, cost: 0, profit: 0, roi: 0, epc: 0, cpc: 0,
+    };
+
+    const rows = sources.map((s, i) => {
+      const st = stats.get(s.name) || zero;
+      return {
+        ...s,
+        index: i + 1,
+        paramCount: (s.params || []).length,
+        lpViews: st.lpClicks ? st.clicks : st.clicks,
+        clicks: st.clicks, uniques: st.uniques, lpClicks: st.lpClicks, lpCtr: st.lpCtr,
+        conversions: st.conversions, cr: st.cr, revenue: st.revenue, cost: st.cost,
+        profit: st.profit, roi: st.roi, epc: st.epc, cpc: st.cpc,
+        cpa: st.conversions ? Math.round((st.cost / st.conversions) * 100) / 100 : 0,
+      };
+    });
+
+    const totals = rows.reduce(
+      (a, r) => {
+        a.clicks += r.clicks; a.uniques += r.uniques; a.lpClicks += r.lpClicks;
+        a.conversions += r.conversions; a.revenue += r.revenue; a.cost += r.cost;
+        return a;
+      },
+      { clicks: 0, uniques: 0, lpClicks: 0, conversions: 0, revenue: 0, cost: 0 }
+    );
+    totals.lpViews = totals.clicks;
+    totals.profit = Math.round((totals.revenue - totals.cost) * 100) / 100;
+    totals.roi = totals.cost ? Math.round((totals.profit / totals.cost) * 10000) / 100 : 0;
+    totals.epc = totals.clicks ? Math.round((totals.revenue / totals.clicks) * 10000) / 10000 : 0;
+    totals.cpc = totals.clicks ? Math.round((totals.cost / totals.clicks) * 10000) / 10000 : 0;
+    totals.cpa = totals.conversions ? Math.round((totals.cost / totals.conversions) * 100) / 100 : 0;
+    totals.cr = totals.clicks ? Math.round((totals.conversions / totals.clicks) * 10000) / 100 : 0;
+    totals.lpCtr = totals.clicks ? Math.round((totals.lpClicks / totals.clicks) * 10000) / 100 : 0;
+
+    res.json({ rows, totals, source: report.source });
+  })
+);
+
+router.post(
+  '/sources/:id/clone',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const src = await TrafficSource.findById(req.params.id).lean();
+    if (!src) throw notFound();
+    const { _id, createdAt, updatedAt, name, slug, ...rest } = src;
+    const clone = await TrafficSource.create({
+      ...rest,
+      name: `${name} (copy)`,
+      slug: slugify(`${name}-copy`),
+      status: 'paused',
+    });
+    await refreshCache();
+    res.status(201).json(clone.toObject());
+  })
+);
+
+router.post(
+  '/sources/bulk',
+  asyncRoute(async (req, res) => {
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(isObjectId);
+    if (!ids.length) throw badRequest('Select at least one channel');
+    const action = str(req.body?.action, 24);
+
+    let result;
+    if (action === 'status') {
+      const status = req.body?.status === 'paused' ? 'paused' : 'active';
+      result = await TrafficSource.updateMany({ _id: { $in: ids } }, { $set: { status } });
+    } else if (action === 'delete') {
+      result = await TrafficSource.deleteMany({ _id: { $in: ids } });
+    } else {
+      throw badRequest('Unknown bulk action');
+    }
+
+    await refreshCache();
+    res.json({ ok: true, matched: result.matchedCount ?? result.deletedCount ?? 0 });
+  })
+);
+
+router.use('/sources', crudRouter(TrafficSource, { beforeSave: normalizeSource }));
+
+/* ------------------------------------------------------ affiliate networks */
+const normalizeNetwork = async (body, existing) => {
+  if (!str(body.name)) throw badRequest('Name is required');
+  if (!existing && !body.postbackSecurityKey) body.postbackSecurityKey = newSecurityKey();
+  if (existing && !body.postbackSecurityKey) delete body.postbackSecurityKey;
+
+  if (Array.isArray(body.params)) {
+    const seen = new Set();
+    body.params = body.params
+      .map((p) => ({
+        param: str(p?.param, 60),
+        macro: str(p?.macro, 200),
+        name: str(p?.name, 80),
+        role: POSTBACK_ROLES.includes(p?.role) ? p.role : '',
+      }))
+      .filter((p) => {
+        if (!p.param || seen.has(p.param)) return false;
+        seen.add(p.param);
+        return true;
+      });
+
+    // Keep the legacy mapping in step with whatever the roles now say
+    const mapping = { ...(existing?.paramMapping || {}), ...(body.paramMapping || {}) };
+    for (const p of body.params) {
+      if (['clickid', 'payout', 'txid', 'status', 'type'].includes(p.role)) mapping[p.role] = p.param;
+    }
+    body.paramMapping = mapping;
+  }
+
+  if (body.clickExpiration) {
+    body.clickExpiration = {
+      enabled: Boolean(body.clickExpiration.enabled),
+      days: Math.max(0, Number(body.clickExpiration.days) || 0),
+    };
+  }
+  if (body.whitelistedIps) {
+    body.whitelistedIps = {
+      enabled: Boolean(body.whitelistedIps.enabled),
+      ips: (Array.isArray(body.whitelistedIps.ips) ? body.whitelistedIps.ips : [])
+        .map((i) => str(i, 64))
+        .filter(Boolean),
+    };
+  }
+  if (body.postbackProtection) {
+    body.postbackProtection = { enabled: Boolean(body.postbackProtection.enabled) };
+  }
+  if (body.duplicateMode && !DUPLICATE_MODES.includes(body.duplicateMode)) {
+    throw badRequest('Unknown duplicate postback mode');
+  }
+
+  return body;
+};
+
+router.get('/networks/catalog', (req, res) => {
+  res.json({ items: networkCatalogSummary(), roles: POSTBACK_ROLES, duplicateModes: DUPLICATE_MODES });
+});
+
+router.post(
+  '/networks/from-template',
+  asyncRoute(async (req, res) => {
+    const entry = getNetworkTemplate(str(req.body?.templateId, 40));
+    if (!entry) throw badRequest('Unknown template');
+
+    const body = await normalizeNetwork(
+      {
+        name: str(req.body?.name, 120) || entry.name,
+        notes: entry.description,
+        status: 'active',
+        postbackSecurityKey: newSecurityKey(),
+        ...entry.template,
+      },
+      null
+    );
+
+    const created = await AffiliateNetwork.create(body);
+    await refreshCache();
+    res.status(201).json(created.toObject());
+  })
+);
+
+/* Offer sources table: networks joined with the metrics of their offers */
+router.get(
+  '/networks/table',
+  asyncRoute(async (req, res) => {
+    const q = {};
+    if (req.query.title) {
+      q.name = new RegExp(String(req.query.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    }
+    if (req.query.status && req.query.status !== 'all') q.status = String(req.query.status);
+
+    const [networks, offers, report] = await Promise.all([
+      AffiliateNetwork.find(q).sort({ createdAt: -1 }).lean(),
+      Offer.find({}, { networkId: 1 }).lean(),
+      runReport({
+        groupBy: 'offer',
+        from: req.query.from,
+        to: req.query.to,
+        includeBots: req.query.includeBots,
+        limit: 5000,
+      }),
+    ]);
+
+    // A network's numbers are the sum of its offers'
+    const offerToNetwork = new Map(offers.map((o) => [String(o._id), o.networkId ? String(o.networkId) : '']));
+    const byNetwork = new Map();
+    for (const row of report.rows) {
+      const nid = offerToNetwork.get(row.key);
+      if (!nid) continue;
+      const cur = byNetwork.get(nid) || {
+        clicks: 0, uniques: 0, lpClicks: 0, conversions: 0, revenue: 0, cost: 0,
+      };
+      cur.clicks += row.clicks; cur.uniques += row.uniques; cur.lpClicks += row.lpClicks;
+      cur.conversions += row.conversions; cur.revenue += row.revenue; cur.cost += row.cost;
+      byNetwork.set(nid, cur);
+    }
+
+    const offerCount = offers.reduce((m, o) => {
+      const nid = o.networkId ? String(o.networkId) : '';
+      if (nid) m.set(nid, (m.get(nid) || 0) + 1);
+      return m;
+    }, new Map());
+
+    const derive = (s) => {
+      const profit = Math.round((s.revenue - s.cost) * 100) / 100;
+      return {
+        ...s,
+        lpViews: s.clicks,
+        profit,
+        roi: s.cost ? Math.round((profit / s.cost) * 10000) / 100 : 0,
+        epc: s.clicks ? Math.round((s.revenue / s.clicks) * 10000) / 10000 : 0,
+        cpa: s.conversions ? Math.round((s.cost / s.conversions) * 100) / 100 : 0,
+        cr: s.clicks ? Math.round((s.conversions / s.clicks) * 10000) / 100 : 0,
+      };
+    };
+
+    const zero = { clicks: 0, uniques: 0, lpClicks: 0, conversions: 0, revenue: 0, cost: 0 };
+    const rows = networks.map((n, i) => ({
+      ...n,
+      index: i + 1,
+      offerCount: offerCount.get(String(n._id)) || 0,
+      paramCount: (n.params || []).length,
+      ...derive(byNetwork.get(String(n._id)) || zero),
+    }));
+
+    const totalsRaw = rows.reduce(
+      (a, r) => {
+        a.clicks += r.clicks; a.uniques += r.uniques; a.lpClicks += r.lpClicks;
+        a.conversions += r.conversions; a.revenue += r.revenue; a.cost += r.cost;
+        return a;
+      },
+      { ...zero }
+    );
+
+    res.json({ rows, totals: derive(totalsRaw), source: report.source });
+  })
+);
+
+router.post(
+  '/networks/:id/clone',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const src = await AffiliateNetwork.findById(req.params.id).lean();
+    if (!src) throw notFound();
+    const { _id, createdAt, updatedAt, name, postbackSecurityKey, ...rest } = src;
+    const clone = await AffiliateNetwork.create({
+      ...rest,
+      name: `${name} (copy)`,
+      postbackSecurityKey: newSecurityKey(),
+      status: 'paused',
+    });
+    await refreshCache();
+    res.status(201).json(clone.toObject());
+  })
+);
+
+router.post(
+  '/networks/bulk',
+  asyncRoute(async (req, res) => {
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(isObjectId);
+    if (!ids.length) throw badRequest('Select at least one offer source');
+    const action = str(req.body?.action, 24);
+
+    let result;
+    if (action === 'status') {
+      const status = req.body?.status === 'paused' ? 'paused' : 'active';
+      result = await AffiliateNetwork.updateMany({ _id: { $in: ids } }, { $set: { status } });
+    } else if (action === 'delete') {
+      result = await AffiliateNetwork.deleteMany({ _id: { $in: ids } });
+    } else {
+      throw badRequest('Unknown bulk action');
+    }
+
+    await refreshCache();
+    res.json({ ok: true, matched: result.matchedCount ?? result.deletedCount ?? 0 });
+  })
+);
+
+router.use('/networks', crudRouter(AffiliateNetwork, { beforeSave: normalizeNetwork }));
+
+// Regenerate a network's security key
+router.post(
+  '/networks/:id/rotate-key',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const doc = await AffiliateNetwork.findByIdAndUpdate(
+      req.params.id,
+      { $set: { postbackSecurityKey: newSecurityKey() } },
+      { new: true }
+    ).lean();
+    if (!doc) throw notFound();
+    await refreshCache();
+    res.json(doc);
+  })
+);
+
+/* ------------------------------------------------------------------ offers */
+const normalizeOffer = async (body) => {
+  if (!str(body.name)) throw badRequest('Name is required');
+  if (!isHttpUrl(body.url)) throw badRequest('Offer URL must start with http:// or https://');
+  if (body.networkId === '') body.networkId = null;
+  if (Array.isArray(body.geo)) body.geo = body.geo.map((g) => String(g).toUpperCase().slice(0, 3));
+  if (Array.isArray(body.tags)) {
+    body.tags = [...new Set(body.tags.map((t) => str(t, 40)).filter(Boolean))];
+  }
+  if (body.caps) {
+    const c = body.caps;
+    body.caps = {
+      uniqueVisits: Math.max(0, Number(c.uniqueVisits) || 0),
+      clickCap: Math.max(0, Number(c.clickCap) || 0),
+      conversionCap: Math.max(0, Number(c.conversionCap) || 0),
+      timePeriod: ['hour', 'day', 'month', 'total'].includes(c.timePeriod) ? c.timePeriod : 'day',
+      filterType: c.filterType === 'unique' ? 'unique' : 'none',
+      alertOnClickCap: Boolean(c.alertOnClickCap),
+      alertOnConversionCap: Boolean(c.alertOnConversionCap),
+    };
+  }
+  return body;
+};
+
+const afterOfferWrite = async () => {
+  await refreshCache();
+  await refreshCaps();
+};
+
+/* Offers table: entities joined with their metrics for the selected date range */
+router.get(
+  '/offers/table',
+  asyncRoute(async (req, res) => {
+    const q = {};
+    if (req.query.title) {
+      q.name = new RegExp(String(req.query.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    }
+    if (req.query.status && req.query.status !== 'all') q.status = String(req.query.status);
+    if (req.query.networkId && isObjectId(req.query.networkId)) q.networkId = req.query.networkId;
+    if (req.query.tags) {
+      const tags = String(req.query.tags).split(',').map((t) => t.trim()).filter(Boolean);
+      if (tags.length) q.tags = { $in: tags };
+    }
+    // "Date connected" - when the offer itself was created
+    if (req.query.connectedFrom || req.query.connectedTo) {
+      const tz = getSettingsSync().reportTimezone;
+      const range = parseRange(req.query.connectedFrom, req.query.connectedTo, tz);
+      q.createdAt = { $gte: range.utcFrom, $lte: range.utcTo };
+    }
+
+    const [offers, report] = await Promise.all([
+      Offer.find(q).sort({ createdAt: -1 }).lean(),
+      runReport({
+        groupBy: 'offer',
+        from: req.query.from,
+        to: req.query.to,
+        includeBots: req.query.includeBots,
+        limit: 5000,
+      }),
+    ]);
+
+    const stats = new Map(report.rows.map((r) => [r.key, r]));
+    const zero = {
+      clicks: 0, uniques: 0, lpClicks: 0, lpCtr: 0, conversions: 0, cr: 0,
+      revenue: 0, cost: 0, profit: 0, roi: 0, epc: 0, cpc: 0,
+    };
+
+    const rows = offers.map((o, i) => {
+      const s = stats.get(String(o._id)) || zero;
+      const usage = capUsage(o._id);
+      return {
+        ...o,
+        index: i + 1,
+        networkName: o.networkId ? getNetworkById(o.networkId)?.name || '' : '',
+        clicks: s.clicks, uniques: s.uniques, lpClicks: s.lpClicks, lpCtr: s.lpCtr,
+        conversions: s.conversions, cr: s.cr, revenue: s.revenue, cost: s.cost,
+        profit: s.profit, roi: s.roi, epc: s.epc, cpc: s.cpc,
+        cpa: s.conversions ? Math.round((s.cost / s.conversions) * 100) / 100 : 0,
+        capUsage: usage,
+        cappedBy: capStatus(o),
+      };
+    });
+
+    const totals = rows.reduce(
+      (a, r) => {
+        a.clicks += r.clicks; a.uniques += r.uniques; a.lpClicks += r.lpClicks;
+        a.conversions += r.conversions; a.revenue += r.revenue; a.cost += r.cost;
+        return a;
+      },
+      { clicks: 0, uniques: 0, lpClicks: 0, conversions: 0, revenue: 0, cost: 0 }
+    );
+    totals.profit = Math.round((totals.revenue - totals.cost) * 100) / 100;
+    totals.roi = totals.cost ? Math.round((totals.profit / totals.cost) * 10000) / 100 : 0;
+    totals.epc = totals.clicks ? Math.round((totals.revenue / totals.clicks) * 10000) / 10000 : 0;
+    totals.cpa = totals.conversions ? Math.round((totals.cost / totals.conversions) * 100) / 100 : 0;
+    totals.cr = totals.clicks ? Math.round((totals.conversions / totals.clicks) * 10000) / 100 : 0;
+    totals.lpCtr = totals.clicks ? Math.round((totals.lpClicks / totals.clicks) * 10000) / 100 : 0;
+
+    const allTags = [...new Set(offers.flatMap((o) => o.tags || []))].sort();
+
+    res.json({ rows, totals, tags: allTags, source: report.source });
+  })
+);
+
+/* Duplicate an offer, including caps and tags */
+router.post(
+  '/offers/:id/clone',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const src = await Offer.findById(req.params.id).lean();
+    if (!src) throw notFound();
+    const { _id, createdAt, updatedAt, ...rest } = src;
+    const clone = await Offer.create({ ...rest, name: `${src.name} (copy)`, status: 'paused' });
+    await afterOfferWrite();
+    res.status(201).json(clone.toObject());
+  })
+);
+
+/* Bulk status / tag edits from the offers toolbar */
+router.post(
+  '/offers/bulk',
+  asyncRoute(async (req, res) => {
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(isObjectId);
+    if (!ids.length) throw badRequest('Select at least one offer');
+    const action = str(req.body?.action, 24);
+
+    let result;
+    if (action === 'status') {
+      const status = req.body?.status === 'paused' ? 'paused' : 'active';
+      result = await Offer.updateMany({ _id: { $in: ids } }, { $set: { status } });
+    } else if (action === 'addTags' || action === 'setTags') {
+      const tags = (Array.isArray(req.body?.tags) ? req.body.tags : [])
+        .map((t) => str(t, 40))
+        .filter(Boolean);
+      result =
+        action === 'setTags'
+          ? await Offer.updateMany({ _id: { $in: ids } }, { $set: { tags } })
+          : await Offer.updateMany({ _id: { $in: ids } }, { $addToSet: { tags: { $each: tags } } });
+    } else if (action === 'delete') {
+      result = await Offer.deleteMany({ _id: { $in: ids } });
+    } else {
+      throw badRequest('Unknown bulk action');
+    }
+
+    await afterOfferWrite();
+    res.json({ ok: true, matched: result.matchedCount ?? result.deletedCount ?? 0 });
+  })
+);
+
+router.use('/offers', crudRouter(Offer, { beforeSave: normalizeOffer, afterWrite: afterOfferWrite }));
+
+/* ----------------------------------------------------------------- landers */
+const normalizeLander = async (body) => {
+  if (!str(body.name)) throw badRequest('Name is required');
+  if (!isHttpUrl(body.url)) throw badRequest('Lander URL must start with http:// or https://');
+  if (body.type && !LANDER_TYPES.includes(body.type)) throw badRequest('Unknown landing page type');
+  if (Array.isArray(body.tags)) {
+    body.tags = [...new Set(body.tags.map((t) => str(t, 40)).filter(Boolean))];
+  }
+  return body;
+};
+
+/* Landers table: entities joined with their metrics for the selected range */
+router.get(
+  '/landers/table',
+  asyncRoute(async (req, res) => {
+    const q = {};
+    if (req.query.title) {
+      q.name = new RegExp(String(req.query.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    }
+    if (req.query.status && req.query.status !== 'all') q.status = String(req.query.status);
+    if (req.query.type && req.query.type !== 'all') q.type = String(req.query.type);
+    if (req.query.tags) {
+      const tags = String(req.query.tags).split(',').map((t) => t.trim()).filter(Boolean);
+      if (tags.length) q.tags = { $in: tags };
+    }
+
+    const [landers, report] = await Promise.all([
+      Lander.find(q).sort({ createdAt: -1 }).lean(),
+      runReport({
+        groupBy: 'lander',
+        from: req.query.from,
+        to: req.query.to,
+        includeBots: req.query.includeBots,
+        limit: 5000,
+      }),
+    ]);
+
+    const stats = new Map(report.rows.map((r) => [r.key, r]));
+    const zero = {
+      clicks: 0, uniques: 0, lpClicks: 0, lpCtr: 0, conversions: 0, cr: 0,
+      revenue: 0, cost: 0, profit: 0, roi: 0, epc: 0, cpc: 0,
+    };
+
+    const rows = landers.map((l, i) => {
+      const s = stats.get(String(l._id)) || zero;
+      return {
+        ...l,
+        index: i + 1,
+        // A lander's "LP views" are the clicks routed to it; LP clicks are the
+        // visitors who then clicked through to the offer.
+        lpViews: s.clicks,
+        lpClicks: s.lpClicks,
+        lpCtr: s.lpCtr,
+        clicks: s.clicks,
+        uniques: s.uniques,
+        conversions: s.conversions, cr: s.cr, revenue: s.revenue, cost: s.cost,
+        profit: s.profit, roi: s.roi, epc: s.epc, cpc: s.cpc,
+        cpa: s.conversions ? Math.round((s.cost / s.conversions) * 100) / 100 : 0,
+      };
+    });
+
+    const totals = rows.reduce(
+      (a, r) => {
+        a.lpViews += r.lpViews; a.clicks += r.clicks; a.uniques += r.uniques;
+        a.lpClicks += r.lpClicks; a.conversions += r.conversions;
+        a.revenue += r.revenue; a.cost += r.cost;
+        return a;
+      },
+      { lpViews: 0, clicks: 0, uniques: 0, lpClicks: 0, conversions: 0, revenue: 0, cost: 0 }
+    );
+    totals.profit = Math.round((totals.revenue - totals.cost) * 100) / 100;
+    totals.roi = totals.cost ? Math.round((totals.profit / totals.cost) * 10000) / 100 : 0;
+    totals.epc = totals.clicks ? Math.round((totals.revenue / totals.clicks) * 10000) / 10000 : 0;
+    totals.cpc = totals.clicks ? Math.round((totals.cost / totals.clicks) * 10000) / 10000 : 0;
+    totals.cpa = totals.conversions ? Math.round((totals.cost / totals.conversions) * 100) / 100 : 0;
+    totals.cr = totals.clicks ? Math.round((totals.conversions / totals.clicks) * 10000) / 100 : 0;
+    totals.lpCtr = totals.lpViews ? Math.round((totals.lpClicks / totals.lpViews) * 10000) / 100 : 0;
+
+    const allTags = [...new Set(landers.flatMap((l) => l.tags || []))].sort();
+    res.json({ rows, totals, tags: allTags, source: report.source });
+  })
+);
+
+router.post(
+  '/landers/:id/clone',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const src = await Lander.findById(req.params.id).lean();
+    if (!src) throw notFound();
+    const { _id, createdAt, updatedAt, ...rest } = src;
+    const clone = await Lander.create({ ...rest, name: `${src.name} (copy)`, status: 'paused' });
+    await refreshCache();
+    res.status(201).json(clone.toObject());
+  })
+);
+
+router.post(
+  '/landers/bulk',
+  asyncRoute(async (req, res) => {
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(isObjectId);
+    if (!ids.length) throw badRequest('Select at least one lander');
+    const action = str(req.body?.action, 24);
+
+    let result;
+    if (action === 'status') {
+      const status = req.body?.status === 'paused' ? 'paused' : 'active';
+      result = await Lander.updateMany({ _id: { $in: ids } }, { $set: { status } });
+    } else if (action === 'addTags' || action === 'setTags') {
+      const tags = (Array.isArray(req.body?.tags) ? req.body.tags : []).map((t) => str(t, 40)).filter(Boolean);
+      result =
+        action === 'setTags'
+          ? await Lander.updateMany({ _id: { $in: ids } }, { $set: { tags } })
+          : await Lander.updateMany({ _id: { $in: ids } }, { $addToSet: { tags: { $each: tags } } });
+    } else if (action === 'delete') {
+      result = await Lander.deleteMany({ _id: { $in: ids } });
+    } else {
+      throw badRequest('Unknown bulk action');
+    }
+
+    await refreshCache();
+    res.json({ ok: true, matched: result.matchedCount ?? result.deletedCount ?? 0 });
+  })
+);
+
+router.use('/landers', crudRouter(Lander, { beforeSave: normalizeLander }));
+
+/* Macro reference used by the URL builders in the lander/offer modals */
+router.get('/macros', (req, res) => {
+  res.json({ macros: MACRO_LIST, landerTypes: LANDER_TYPES });
+});
+
+/* -------------------------------------------------------- funnel templates */
+const weightedList = (list, key) =>
+  (Array.isArray(list) ? list : [])
+    .filter((x) => x && x[key])
+    .map((x) => ({ [key]: x[key], weight: Math.max(0, Number(x.weight) || 0) }));
+
+const normalizeFunnel = async (body) => {
+  if (!str(body.name)) throw badRequest('Title is required');
+  if (body.type && !FUNNEL_TYPES.includes(body.type)) throw badRequest('Unknown funnel template type');
+
+  body.landers = body.type === 'direct-offer' ? [] : weightedList(body.landers, 'landerId');
+  body.offers = weightedList(body.offers, 'offerId');
+
+  if (body.filters) {
+    body.filters = {
+      country: (body.filters.country || []).map((c) => String(c).toUpperCase()),
+      device: (body.filters.device || []).map((c) => String(c).toLowerCase()),
+      os: body.filters.os || [],
+      browser: body.filters.browser || [],
+      timeRange: {
+        from: numOrNull(body.filters.timeRange?.from),
+        to: numOrNull(body.filters.timeRange?.to),
+      },
+    };
+  }
+  return body;
+};
+
+router.post(
+  '/funnels/:id/clone',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const src = await FunnelTemplate.findById(req.params.id).lean();
+    if (!src) throw notFound();
+    const { _id, createdAt, updatedAt, name, ...rest } = src;
+    const clone = await FunnelTemplate.create({ ...rest, name: `${name} (copy)` });
+    res.status(201).json(clone.toObject());
+  })
+);
+
+router.post(
+  '/funnels/bulk',
+  asyncRoute(async (req, res) => {
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(isObjectId);
+    if (!ids.length) throw badRequest('Select at least one funnel template');
+    if (str(req.body?.action, 24) !== 'delete') throw badRequest('Unknown bulk action');
+    const result = await FunnelTemplate.deleteMany({ _id: { $in: ids } });
+    res.json({ ok: true, matched: result.deletedCount || 0 });
+  })
+);
+
+router.use('/funnels', crudRouter(FunnelTemplate, { beforeSave: normalizeFunnel, afterWrite: async () => {} }));
+
+/* --------------------------------------------------------------- campaigns */
+const normalizeCampaign = async (body, existing) => {
+  if (!str(body.name)) throw badRequest('Name is required');
+  const slug = slugify(body.slug || body.name);
+  if (!slug) throw badRequest('Slug could not be derived from the name');
+
+  const clash = await Campaign.findOne({ slug, ...(existing ? { _id: { $ne: existing._id } } : {}) }).lean();
+  if (clash) throw badRequest(`Slug "${slug}" is already used by another campaign`);
+  body.slug = slug;
+
+  if (body.trafficSourceId === '') body.trafficSourceId = null;
+  if (body.domainId === '' || body.domainId === undefined) body.domainId = body.domainId ?? null;
+  if (body.domainId && !isObjectId(body.domainId)) throw badRequest('Invalid tracking domain');
+  if (body.domainId && !(await Domain.exists({ _id: body.domainId }))) {
+    throw badRequest('That tracking domain no longer exists');
+  }
+
+  body.paths = (Array.isArray(body.paths) ? body.paths : []).map((p) => ({
+    name: str(p.name, 80),
+    weight: Number(p.weight) || 0,
+    directLinking: Boolean(p.directLinking),
+    landerId: p.directLinking || !p.landerId ? null : p.landerId,
+    landers: p.directLinking ? [] : weightedList(p.landers, 'landerId'),
+    offers: (Array.isArray(p.offers) ? p.offers : [])
+      .filter((o) => o && o.offerId)
+      .map((o) => ({ offerId: o.offerId, weight: Number(o.weight) || 0 })),
+  }));
+
+  if (Array.isArray(body.tags)) {
+    body.tags = [...new Set(body.tags.map((t) => str(t, 40)).filter(Boolean))];
+  }
+  body.redirectType = body.redirectType === 'meta' ? 'meta' : '302';
+
+  const cleanForwards = (list) =>
+    (Array.isArray(list) ? list : [])
+      .map((f) => ({ name: str(f?.name, 60), url: str(f?.url, 1024), enabled: f?.enabled !== false }))
+      .filter((f) => f.url);
+  body.postbackForwarding = cleanForwards(body.postbackForwarding);
+  body.clickForwarding = cleanForwards(body.clickForwarding);
+
+  body.rules = (Array.isArray(body.rules) ? body.rules : [])
+    .filter((r) => r && Number.isInteger(Number(r.pathIndex)))
+    .map((r) => ({
+      name: str(r.name, 80),
+      pathIndex: Number(r.pathIndex),
+      conditions: {
+        country: (r.conditions?.country || []).map((c) => String(c).toUpperCase()),
+        device: (r.conditions?.device || []).map((c) => String(c).toLowerCase()),
+        os: r.conditions?.os || [],
+        browser: r.conditions?.browser || [],
+        timeRange: {
+          from: numOrNull(r.conditions?.timeRange?.from),
+          to: numOrNull(r.conditions?.timeRange?.to),
+        },
+      },
+    }));
+
+  return body;
+};
+
+const numOrNull = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 && n <= 23 ? n : null;
+};
+
+/* Campaigns table: entities joined with their metrics for the selected range */
+router.get(
+  '/campaigns/table',
+  asyncRoute(async (req, res) => {
+    const q = {};
+    if (req.query.title) {
+      q.name = new RegExp(String(req.query.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    }
+    if (req.query.status && req.query.status !== 'all') q.status = String(req.query.status);
+    if (req.query.trafficSourceId && isObjectId(req.query.trafficSourceId)) {
+      q.trafficSourceId = req.query.trafficSourceId;
+    }
+    if (req.query.tags) {
+      const tags = String(req.query.tags).split(',').map((t) => t.trim()).filter(Boolean);
+      if (tags.length) q.tags = { $in: tags };
+    }
+
+    const [campaigns, report] = await Promise.all([
+      Campaign.find(q).sort({ createdAt: -1 }).lean(),
+      runReport({
+        groupBy: 'campaign',
+        from: req.query.from,
+        to: req.query.to,
+        includeBots: req.query.includeBots,
+        limit: 5000,
+      }),
+    ]);
+
+    const sources = await TrafficSource.find({}, { name: 1 }).lean();
+    const sourceName = new Map(sources.map((s) => [String(s._id), s.name]));
+    const stats = new Map(report.rows.map((r) => [r.key, r]));
+    const zero = {
+      clicks: 0, uniques: 0, lpClicks: 0, lpCtr: 0, conversions: 0, cr: 0,
+      revenue: 0, cost: 0, profit: 0, roi: 0, epc: 0, cpc: 0,
+    };
+
+    const rows = campaigns.map((c, i) => {
+      const s = stats.get(String(c._id)) || zero;
+      return {
+        ...c,
+        index: i + 1,
+        sourceName: c.trafficSourceId ? sourceName.get(String(c.trafficSourceId)) || '' : '',
+        funnels: (c.paths || []).length,
+        clicks: s.clicks, uniques: s.uniques, lpClicks: s.lpClicks, lpCtr: s.lpCtr,
+        conversions: s.conversions, cr: s.cr, revenue: s.revenue, cost: s.cost,
+        profit: s.profit, roi: s.roi, epc: s.epc, cpc: s.cpc,
+        cpa: s.conversions ? Math.round((s.cost / s.conversions) * 100) / 100 : 0,
+      };
+    });
+
+    const totals = rows.reduce(
+      (a, r) => {
+        a.clicks += r.clicks; a.uniques += r.uniques; a.lpClicks += r.lpClicks;
+        a.conversions += r.conversions; a.revenue += r.revenue; a.cost += r.cost;
+        return a;
+      },
+      { clicks: 0, uniques: 0, lpClicks: 0, conversions: 0, revenue: 0, cost: 0 }
+    );
+    totals.profit = Math.round((totals.revenue - totals.cost) * 100) / 100;
+    totals.roi = totals.cost ? Math.round((totals.profit / totals.cost) * 10000) / 100 : 0;
+    totals.epc = totals.clicks ? Math.round((totals.revenue / totals.clicks) * 10000) / 10000 : 0;
+    totals.cpc = totals.clicks ? Math.round((totals.cost / totals.clicks) * 10000) / 10000 : 0;
+    totals.cpa = totals.conversions ? Math.round((totals.cost / totals.conversions) * 100) / 100 : 0;
+    totals.cr = totals.clicks ? Math.round((totals.conversions / totals.clicks) * 10000) / 100 : 0;
+    totals.lpCtr = totals.clicks ? Math.round((totals.lpClicks / totals.clicks) * 10000) / 100 : 0;
+
+    const allTags = [...new Set(campaigns.flatMap((c) => c.tags || []))].sort();
+    res.json({ rows, totals, tags: allTags, source: report.source });
+  })
+);
+
+router.post(
+  '/campaigns/:id/clone',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const src = await Campaign.findById(req.params.id).lean();
+    if (!src) throw notFound();
+    const { _id, createdAt, updatedAt, slug, name, ...rest } = src;
+
+    // Slugs are unique, so find a free one before inserting the copy
+    let n = 2;
+    let nextSlug = `${slug}-copy`;
+    // eslint-disable-next-line no-await-in-loop
+    while (await Campaign.exists({ slug: nextSlug })) {
+      nextSlug = `${slug}-copy-${n}`;
+      n += 1;
+    }
+
+    const clone = await Campaign.create({
+      ...rest,
+      name: `${name} (copy)`,
+      slug: nextSlug,
+      status: 'paused',
+    });
+    await refreshCache();
+    res.status(201).json(clone.toObject());
+  })
+);
+
+router.post(
+  '/campaigns/bulk',
+  asyncRoute(async (req, res) => {
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(isObjectId);
+    if (!ids.length) throw badRequest('Select at least one campaign');
+    const action = str(req.body?.action, 24);
+
+    let result;
+    if (action === 'status') {
+      const status = req.body?.status === 'paused' ? 'paused' : 'active';
+      result = await Campaign.updateMany({ _id: { $in: ids } }, { $set: { status } });
+    } else if (action === 'addTags' || action === 'setTags') {
+      const tags = (Array.isArray(req.body?.tags) ? req.body.tags : []).map((t) => str(t, 40)).filter(Boolean);
+      result =
+        action === 'setTags'
+          ? await Campaign.updateMany({ _id: { $in: ids } }, { $set: { tags } })
+          : await Campaign.updateMany({ _id: { $in: ids } }, { $addToSet: { tags: { $each: tags } } });
+    } else if (action === 'delete') {
+      result = await Campaign.deleteMany({ _id: { $in: ids } });
+    } else {
+      throw badRequest('Unknown bulk action');
+    }
+
+    await refreshCache();
+    res.json({ ok: true, matched: result.matchedCount ?? result.deletedCount ?? 0 });
+  })
+);
+
+router.use('/campaigns', crudRouter(Campaign, { beforeSave: normalizeCampaign }));
+
+/* Tracking-link helper: builds the campaign URL with the source's params filled in */
+router.get(
+  '/campaigns/:id/links',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const campaign = await Campaign.findById(req.params.id).lean();
+    if (!campaign) throw notFound();
+
+    const source = campaign.trafficSourceId
+      ? await TrafficSource.findById(campaign.trafficSourceId).lean()
+      : null;
+
+    /* Link origin: the campaign's own tracking domain, else the default one,
+     * else the install's BASE_URL. */
+    const domain = campaign.domainId
+      ? await Domain.findById(campaign.domainId).lean()
+      : await Domain.findOne({ isDefault: true, status: 'active' }).lean();
+    const origin = domain ? `${domain.protocol}://${domain.host}` : config.baseUrl;
+
+    const base = `${origin}/c/${campaign.slug}`;
+    const tokens = source?.tokens ? Object.entries(source.tokens) : [];
+    const params = tokens.map(([k, v]) => `${k}=${v}`).join('&');
+    const template = source?.paramTemplate?.trim();
+    const query = template || params;
+
+    res.json({
+      campaignUrl: query ? `${base}?${query}` : base,
+      bareUrl: base,
+      goUrl: `${origin}/go?clickid={clickid}`,
+      pixelUrl: `${origin}/pixel.gif?clickid={clickid}&payout={payout}&type=lead`,
+      scriptTag: `<script src="${origin}/track.js" data-kcmp="${campaign.slug}"></script>`,
+      origin,
+      domain: domain ? { _id: domain._id, host: domain.host, isDefault: domain.isDefault } : null,
+      source: source ? { _id: source._id, name: source.name } : null,
+      macros: MACRO_LIST,
+    });
+  })
+);
+
+export default router;
