@@ -90,7 +90,15 @@ router.get('/c/:slug', (req, res) => {
 });
 
 /* ---------------------------------------------------------------------- /go */
-router.get('/go', async (req, res) => {
+router.options('/go', openCors, (req, res) => res.sendStatus(204));
+
+/**
+ * `?beacon=1` records the lander click-through and answers 204 instead of
+ * redirecting, for landers whose CTA must not navigate the visitor away.
+ * Reached cross-origin from the lander, hence openCors.
+ */
+router.get('/go', openCors, async (req, res) => {
+  const beacon = req.query.beacon === '1' || req.query.beacon === 'true';
   const clickid = str(req.query.clickid || req.cookies?.[CLICK_COOKIE], 64);
   noStore(res);
   try {
@@ -125,8 +133,12 @@ router.get('/go', async (req, res) => {
     });
     const url = replaceMacros(offer.url, ctx);
 
-    res.cookie(CLICK_COOKIE, clickid, cookieOpts);
-    res.redirect(302, url);
+    if (beacon) {
+      res.status(204).end();
+    } else {
+      res.cookie(CLICK_COOKIE, clickid, cookieOpts);
+      res.redirect(302, url);
+    }
 
     // async tail: mark the lander click-through exactly once
     if (!click.lpClick) {

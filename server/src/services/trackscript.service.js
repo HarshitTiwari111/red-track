@@ -41,9 +41,16 @@ export function trackScript(baseUrl) {
   var campaign = (el && (el.getAttribute('data-kcmp') || el.getAttribute('data-campaign'))) ||
                  w.KAP_CAMPAIGN || qs('kcmp');
 
-  // Every outbound link is rewired by default; data-kap-links="tagged" narrows
-  // it to links the page marked with data-kap-go.
-  var AUTO = !el || (el.getAttribute('data-kap-links') || 'auto') !== 'tagged';
+  /**
+   * data-kap-links:
+   *   auto   (default) every outbound link is rewired through /go
+   *   tagged           only links marked data-kap-go
+   *   stay             nothing navigates - the click is recorded in the
+   *                    background and the visitor stays on the page
+   */
+  var MODE = (el && el.getAttribute('data-kap-links')) || 'auto';
+  var AUTO = MODE !== 'tagged';
+  var STAY = MODE === 'stay';
 
   var payload = { kcmp: campaign, url: w.location.href, referrer: d.referrer || '' };
   var i;
@@ -109,6 +116,63 @@ export function trackScript(baseUrl) {
     );
   }
 
+  /* ------------------------------------------------------------ stay mode */
+
+  /** A CTA can be an <a>, a <button>, or anything the page tagged by hand. */
+  function isCta(node) {
+    if (!node.getAttribute) return false;
+    if (node.getAttribute('data-kap-stay') !== null) return true;
+    if (node.getAttribute('data-kap-go') !== null) return true;
+    return node.tagName === 'A' && AUTO && isOutbound(node);
+  }
+
+  function ctaFrom(node) {
+    while (node && node !== d) {
+      if (isCta(node)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  /** Record the lander click-through without navigating: /go answers 204 here. */
+  function beacon(clickid, off) {
+    var url = BASE + '/go?beacon=1&clickid=' + encodeURIComponent(clickid) + (off ? '&off=' + encodeURIComponent(off) : '');
+    try {
+      if (w.fetch) {
+        w.fetch(url, { mode: 'cors', credentials: 'include', keepalive: true })['catch'](function () {});
+        return;
+      }
+    } catch (e) { /* fall through to the image beacon */ }
+    var img = new Image();
+    img.src = url;
+  }
+
+  /** Lets the page react - reveal a form, show a thank-you, open a modal. */
+  function fire(node, clickid) {
+    var ev;
+    try {
+      ev = new CustomEvent('kap:click', { bubbles: true, detail: { clickid: clickid } });
+    } catch (e) {
+      ev = d.createEvent('CustomEvent');
+      ev.initCustomEvent('kap:click', true, false, { clickid: clickid });
+    }
+    node.dispatchEvent(ev);
+  }
+
+  function stayHandler(clickid) {
+    d.addEventListener(
+      'click',
+      function (ev) {
+        var cta = ctaFrom(ev.target);
+        if (!cta) return;
+        ev.preventDefault();
+        beacon(clickid, cta.getAttribute('data-kap-offer') || '');
+        fire(cta, clickid);
+      },
+      true
+    );
+  }
+
   function ready(fn) {
     if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', fn);
     else fn();
@@ -120,8 +184,12 @@ export function trackScript(baseUrl) {
     if (!clickid) return;
     w.KAP_CLICKID = clickid;
     setCookie(COOKIE, clickid, 90);
-    delegate(clickid);
-    ready(function () { decorate(clickid); });
+    if (STAY) {
+      stayHandler(clickid);
+    } else {
+      delegate(clickid);
+      ready(function () { decorate(clickid); });
+    }
   }
 
   if (!campaign) {
