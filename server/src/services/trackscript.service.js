@@ -41,26 +41,72 @@ export function trackScript(baseUrl) {
   var campaign = (el && (el.getAttribute('data-kcmp') || el.getAttribute('data-campaign'))) ||
                  w.KAP_CAMPAIGN || qs('kcmp');
 
+  // Every outbound link is rewired by default; data-kap-links="tagged" narrows
+  // it to links the page marked with data-kap-go.
+  var AUTO = !el || (el.getAttribute('data-kap-links') || 'auto') !== 'tagged';
+
   var payload = { kcmp: campaign, url: w.location.href, referrer: d.referrer || '' };
   var i;
   for (i = 0; i < SUBS.length; i++) { var s = qs(SUBS[i]); if (s) payload[SUBS[i]] = s; }
   for (i = 0; i < IDS.length; i++) { var g = qs(IDS[i]); if (g) payload[IDS[i]] = g; }
   var cost = qs('cost'); if (cost) payload.cost = cost;
 
-  function decorate(clickid) {
-    var links = d.querySelectorAll('a[data-kap-go], a[href^="' + BASE + '/go"]');
-    for (var j = 0; j < links.length; j++) {
-      var a = links[j];
-      var off = a.getAttribute('data-kap-offer') || '';
-      var href = a.getAttribute('href') || '';
-      var url;
-      if (href.indexOf(BASE + '/go') === 0) {
-        url = href + (href.indexOf('?') > -1 ? '&' : '?') + 'clickid=' + encodeURIComponent(clickid);
-      } else {
-        url = BASE + '/go?clickid=' + encodeURIComponent(clickid) + (off ? '&off=' + encodeURIComponent(off) : '');
-      }
-      a.setAttribute('href', url);
+  /**
+   * Is this an outbound CTA? Anything pointing at another host counts, which is
+   * what a money link on a landing page looks like. Same-host links (privacy,
+   * terms, anchors), mailto:/tel: and the tracker's own URLs are left alone, and
+   * data-kap-ignore opts a link out by hand.
+   */
+  function isOutbound(a) {
+    if (a.getAttribute('data-kap-ignore') !== null) return false;
+    var href = a.getAttribute('href') || '';
+    if (!/^https?:\\/\\//i.test(href)) return false;
+    if (href.indexOf(BASE) === 0) return false;
+    var probe = d.createElement('a');
+    probe.href = href;
+    return probe.host !== w.location.host;
+  }
+
+  function goUrl(a, clickid) {
+    var off = a.getAttribute('data-kap-offer') || '';
+    var href = a.getAttribute('href') || '';
+    if (href.indexOf(BASE + '/go') === 0) {
+      return href.indexOf('clickid=') > -1
+        ? href
+        : href + (href.indexOf('?') > -1 ? '&' : '?') + 'clickid=' + encodeURIComponent(clickid);
     }
+    return BASE + '/go?clickid=' + encodeURIComponent(clickid) + (off ? '&off=' + encodeURIComponent(off) : '');
+  }
+
+  function shouldRewrite(a) {
+    if (a.getAttribute('data-kap-go') !== null) return true;
+    if ((a.getAttribute('href') || '').indexOf(BASE + '/go') === 0) return true;
+    return AUTO && isOutbound(a);
+  }
+
+  function decorate(clickid) {
+    var all = d.getElementsByTagName('a');
+    for (var j = 0; j < all.length; j++) {
+      if (shouldRewrite(all[j])) all[j].setAttribute('href', goUrl(all[j], clickid));
+    }
+  }
+
+  /**
+   * Links injected after load - popups, sliders, anything rendered by the page's
+   * own scripts - never went through decorate(), so catch them at click time too.
+   */
+  function delegate(clickid) {
+    d.addEventListener(
+      'click',
+      function (ev) {
+        var a = ev.target;
+        while (a && a.tagName !== 'A') a = a.parentNode;
+        if (!a || !a.getAttribute) return;
+        if ((a.getAttribute('href') || '').indexOf(BASE + '/go') === 0) return;
+        if (shouldRewrite(a)) a.setAttribute('href', goUrl(a, clickid));
+      },
+      true
+    );
   }
 
   function ready(fn) {
@@ -74,6 +120,7 @@ export function trackScript(baseUrl) {
     if (!clickid) return;
     w.KAP_CLICKID = clickid;
     setCookie(COOKIE, clickid, 90);
+    delegate(clickid);
     ready(function () { decorate(clickid); });
   }
 
