@@ -238,11 +238,23 @@ h1, h2, h3, h4 {
   color: var(--sidebar-active-text);
   font-weight: 600;
 }
+/* Line icons need a touch more room than the glyphs they replaced, and the
+   stroke reads better slightly larger than the label beside it. */
 .nav-icon {
-  width: 16px;
-  text-align: center;
+  width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
   opacity: 0.9;
-  font-size: 13px;
+}
+.nav-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+.nav a.active .nav-icon {
+  opacity: 1;
 }
 
 /* ---------------------------------------------------------- user menu */

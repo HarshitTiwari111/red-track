@@ -1,35 +1,51 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import UserMenu from './UserMenu.jsx';
 import ViewAsPicker from './ViewAsPicker.jsx';
+import {
+  LuLayoutDashboard,
+  LuMegaphone,
+  LuBadgeCheck,
+  LuChartColumnBig,
+  LuWebhook,
+  LuMousePointerClick,
+  LuTag,
+  LuLayoutTemplate,
+  LuShuffle,
+  LuNetwork,
+  LuFilter,
+  LuGlobe,
+  LuRepeat,
+  LuSettings,
+} from 'react-icons/lu';
 
 const NAV = [
   {
     label: 'Analytics',
     items: [
-      { to: '/', icon: '◫', text: 'Dashboard', end: true },
-      { to: '/campaigns', icon: '◈', text: 'Campaigns' },
-      { to: '/conversions', icon: '✓', text: 'Conversions' },
-      { to: '/reports', icon: '▥', text: 'Reports' },
-      { to: '/postbacks', icon: '⇠', text: 'Postbacks' },
-      { to: '/clicks', icon: '⇢', text: 'Clicks Log' },
+      { to: '/', Icon: LuLayoutDashboard, text: 'Dashboard', end: true },
+      { to: '/campaigns', Icon: LuMegaphone, text: 'Campaigns' },
+      { to: '/conversions', Icon: LuBadgeCheck, text: 'Conversions' },
+      { to: '/reports', Icon: LuChartColumnBig, text: 'Reports' },
+      { to: '/postbacks', Icon: LuWebhook, text: 'Postbacks' },
+      { to: '/clicks', Icon: LuMousePointerClick, text: 'Clicks Log' },
     ],
   },
   {
     label: 'Setup',
     items: [
-      { to: '/offers', icon: '◆', text: 'Offers' },
-      { to: '/landers', icon: '▤', text: 'Landers' },
-      { to: '/sources', icon: '⇄', text: 'Traffic Channels' },
-      { to: '/networks', icon: '⛓', text: 'Offer sources' },
-      { to: '/funnels', icon: '⑂', text: 'Funnel templates' },
+      { to: '/offers', Icon: LuTag, text: 'Offers' },
+      { to: '/landers', Icon: LuLayoutTemplate, text: 'Landers' },
+      { to: '/sources', Icon: LuShuffle, text: 'Traffic Channels' },
+      { to: '/networks', Icon: LuNetwork, text: 'Offer sources' },
+      { to: '/funnels', Icon: LuFilter, text: 'Funnel templates' },
     ],
   },
   {
     label: 'System',
     items: [
-      { to: '/domains', icon: '🌐', text: 'Traffic domain' },
-      { to: '/conversion-tracking', icon: '⇄', text: 'Conversion tracking' },
-      { to: '/settings', icon: '⚙', text: 'Settings' },
+      { to: '/domains', Icon: LuGlobe, text: 'Traffic domain' },
+      { to: '/conversion-tracking', Icon: LuRepeat, text: 'Conversion tracking' },
+      { to: '/settings', Icon: LuSettings, text: 'Settings' },
     ],
   },
 ];
@@ -57,7 +73,7 @@ export default function Layout() {
                   end={item.end}
                   className={({ isActive }) => (isActive ? 'active' : '')}
                 >
-                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-icon"><item.Icon /></span>
                   {item.text}
                 </NavLink>
               ))}
