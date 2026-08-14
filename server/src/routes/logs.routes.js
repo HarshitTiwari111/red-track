@@ -206,16 +206,40 @@ router.patch(
 );
 
 /* -------------------------------------------------------------- diagnostics */
+/**
+ * Every postback the tracker was called with, accepted or refused. This is the
+ * only place that answers "did the network actually call, and with what?" - so
+ * the raw query it sent is returned untouched rather than summarised.
+ */
 router.get(
   '/logs/postbacks',
   asyncRoute(async (req, res) => {
+    const tz = getSettingsSync().reportTimezone || 'Asia/Kolkata';
     const q = {};
+
+    if (req.query.from || req.query.to) {
+      const range = parseRange(req.query.from, req.query.to, tz);
+      q.ts = { $gte: range.utcFrom, $lte: range.utcTo };
+    }
     if (req.query.ok !== undefined && req.query.ok !== '') q.ok = bool(req.query.ok);
+    if (req.query.kind) q.kind = str(req.query.kind, 16);
+
+    // Partial click id is the usual way in: you have it from the ad platform
+    const cid = str(req.query.clickid, 64);
+    if (cid) q.clickid = { $regex: cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+
     const items = await PostbackLog.find(q)
       .sort({ ts: -1 })
       .limit(Math.min(Number(req.query.limit) || 200, 1000))
       .lean();
-    res.json({ items, count: items.length });
+
+    const rows = items.map((d) => ({
+      ...d,
+      networkName: d.networkId ? getNetworkById(d.networkId)?.name || '' : '',
+    }));
+
+    const failed = rows.filter((r) => !r.ok).length;
+    res.json({ items: rows, count: rows.length, failed, retentionDays: 14 });
   })
 );
 

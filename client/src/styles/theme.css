@@ -2611,3 +2611,55 @@ td.neg {
   align-items: center;
   justify-content: center;
 }
+
+/* ---------------------------------------------------------------- postbacks */
+.pb-caret {
+  color: var(--text-mute);
+  font-size: 11px;
+}
+tr.pb-detail td {
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  padding-top: 4px;
+}
+.pb-detail-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-mute);
+  margin-bottom: 8px;
+}
+/* Each parameter as its own chip - an empty value has to be visible at a glance */
+.pb-query {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+.pb-param {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.pb-key {
+  background: var(--panel-2);
+  color: var(--text-dim);
+  padding: 3px 8px;
+  border-right: 1px solid var(--border);
+}
+.pb-val {
+  padding: 3px 8px;
+  color: var(--text);
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pb-val.empty {
+  color: var(--red);
+  font-style: italic;
+}

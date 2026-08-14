@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Page } from '../components/Layout.jsx';
 import DataTable from '../components/DataTable.jsx';
 import Modal from '../components/Modal.jsx';
@@ -27,7 +28,6 @@ export default function Settings() {
   const [settings, setSettings] = useState(null);
   const [users, setUsers] = useState([]);
   const [health, setHealth] = useState(null);
-  const [postbacks, setPostbacks] = useState([]);
   const [clickErrors, setClickErrors] = useState([]);
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -50,7 +50,6 @@ export default function Settings() {
 
   useEffect(() => {
     if (tab !== 'diagnostics') return;
-    logsApi.postbacks({ limit: 100 }).then(setPostbacks).catch(() => {});
     logsApi.clickErrors({ limit: 100 }).then(setClickErrors).catch(() => {});
   }, [tab]);
 
@@ -302,22 +301,11 @@ export default function Settings() {
 
       {tab === 'diagnostics' && (
         <>
-          <div className="panel" style={{ marginBottom: 18 }}>
-            <div className="panel-head">
-              <h3>Recent postbacks</h3>
-              <span className="mute" style={{ fontSize: 12 }}>kept for 14 days</span>
-            </div>
-            <DataTable
-              columns={[
-                { key: 'ts', label: 'Time', render: (r) => new Date(r.ts).toLocaleString() },
-                { key: 'ok', label: 'Result', render: (r) => <span className={`badge ${r.ok ? 'approved' : 'rejected'}`}>{r.ok ? 'ok' : 'failed'}</span> },
-                { key: 'kind', label: 'Kind' },
-                { key: 'clickid', label: 'Click ID', render: (r) => <span className="mono">{r.clickid || '—'}</span> },
-                { key: 'reason', label: 'Reason' },
-              ]}
-              rows={postbacks}
-              maxHeight="45vh"
-            />
+          {/* Postbacks moved to their own page: they are read while debugging a
+              missing conversion, which is not what anyone opens Settings for. */}
+          <div className="page-note" style={{ marginBottom: 18 }}>
+            Looking for conversion postbacks? They have their own page now —{' '}
+            <Link to="/postbacks">Postbacks</Link> — with the raw parameters each caller sent.
           </div>
 
           <div className="panel">

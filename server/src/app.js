@@ -124,8 +124,14 @@ export function createApp() {
         },
       })
     );
-    // React Router fallback - anything not matched above renders the SPA
-    app.get(/^\/(?!api\/|c\/|go|postback|pixel\.gif|track\.js|health).*/, (req, res) => {
+    /**
+     * React Router fallback - anything not matched above renders the SPA.
+     *
+     * The tracking endpoints are excluded by exact name, not by prefix: as a
+     * prefix, "postback" also swallowed the /postbacks dashboard page and left
+     * it 404ing. Only /api/ and /c/ are genuine prefixes.
+     */
+    app.get(/^\/(?!api\/|c\/|(?:go|postback|postback\.js|pixel\.gif|track\.js|health)$).*/, (req, res) => {
       securityHeaders(req, res, () => {});
       res.sendFile(distIndex);
     });

@@ -10,6 +10,7 @@ const NAV = [
       { to: '/campaigns', icon: '◈', text: 'Campaigns' },
       { to: '/clicks', icon: '⇢', text: 'Clicks Log' },
       { to: '/conversions', icon: '✓', text: 'Conversions' },
+      { to: '/postbacks', icon: '⇠', text: 'Postbacks' },
     ],
   },
   {
