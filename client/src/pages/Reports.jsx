@@ -76,17 +76,32 @@ const COLUMNS = [
 
 const DEFAULT_HIDDEN = new Set(['cpc', 'uniques']);
 
+/** The four things a report can be narrowed to; the IP tab lets you pick which. */
+const ENTITY_TYPES = [
+  { id: 'campaign', label: 'Campaign', path: '/campaigns', param: 'campaignId' },
+  { id: 'offers', label: 'Offers', path: '/offers', param: 'offerId' },
+  { id: 'channels', label: 'Traffic channels', path: '/sources', param: 'trafficSourceId' },
+  { id: 'sources', label: 'Offer sources', path: '/networks', param: 'networkId' },
+];
+const byType = (id) => ENTITY_TYPES.find((t) => t.id === id) || ENTITY_TYPES[0];
+
 const TABS = [
   { id: 'popular', label: 'Popular reports' },
-  { id: 'campaign', label: 'Campaign', entity: { label: 'Campaign', path: '/campaigns', param: 'campaignId' } },
-  { id: 'offers', label: 'Offers', entity: { label: 'Offers', path: '/offers', param: 'offerId' } },
+  { id: 'campaign', label: 'Campaign', entity: byType('campaign') },
+  { id: 'offers', label: 'Offers', entity: byType('offers') },
+  { id: 'channels', label: 'Traffic channels', entity: byType('channels') },
+  { id: 'sources', label: 'Offer sources', entity: byType('sources') },
   {
-    id: 'channels',
-    label: 'Traffic channels',
-    entity: { label: 'Traffic channels', path: '/sources', param: 'trafficSourceId' },
+    id: 'ip',
+    label: 'IP report',
+    group: 'ip',
+    // One address per row over a busy day is already a long table, so the range
+    // is a single day and the lander funnel columns are dropped - an IP is being
+    // judged on volume and money, not on how it moved through a lander.
+    singleDay: true,
+    entityChoice: true,
+    columns: ['label', 'clicks', 'lpClicks', 'conversions', 'revenue', 'cost', 'roi', 'epc'],
   },
-  { id: 'sources', label: 'Offer sources', entity: { label: 'Offer sources', path: '/networks', param: 'networkId' } },
-  { id: 'ip', label: 'IP report', group: 'ip' },
 ];
 
 const loadPrefs = () => {
@@ -234,6 +249,7 @@ function ReportTab({ tab, reportTz }) {
   const [tz, setTz] = useState(saved.tz || reportTz);
   const [group, setGroup] = useState(saved.group || tab.group || 'day');
   const [subFilters, setSubFilters] = useState(saved.subFilters || {});
+  const [entityType, setEntityType] = useState(saved.entityType || 'campaign');
   const [sortBy, setSortBy] = useState(saved.sortBy || 'clicks');
   const [sortDir, setSortDir] = useState(saved.sortDir || 'desc');
 
@@ -255,13 +271,17 @@ function ReportTab({ tab, reportTz }) {
     if (!saved.tz) setTz(reportTz);
   }, [reportTz]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A fixed tab always narrows by its own entity; the IP tab lets you choose which
+  const entity = tab.entityChoice ? byType(entityType) : tab.entity;
+
   useEffect(() => {
-    if (!tab.entity) return;
+    if (!entity) return;
+    setEntities([]);
     api
-      .get(tab.entity.path)
+      .get(entity.path)
       .then(({ data: d }) => setEntities(d.items || []))
       .catch(() => {});
-  }, [tab.entity]);
+  }, [entity]);
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -278,6 +298,7 @@ function ReportTab({ tab, reportTz }) {
       const prefs = loadPrefs();
       prefs[tab.id] = {
         entityId,
+        entityType,
         preset,
         from,
         to,
@@ -292,7 +313,7 @@ function ReportTab({ tab, reportTz }) {
       };
       localStorage.setItem(STORAGE, JSON.stringify(prefs));
     },
-    [tab.id, entityId, preset, from, to, tz, group, subFilters, sortBy, sortDir, hidden, density]
+    [tab.id, entityId, entityType, preset, from, to, tz, group, subFilters, sortBy, sortDir, hidden, density]
   );
 
   const run = useCallback(async () => {
@@ -300,7 +321,7 @@ function ReportTab({ tab, reportTz }) {
     setError('');
     try {
       const params = { groupBy: group, from, to, tz, sortBy, sortDir, limit: 1000 };
-      if (tab.entity && entityId) params[tab.entity.param] = entityId;
+      if (entity && entityId) params[entity.param] = entityId;
       for (const [k, v] of Object.entries(subFilters)) if (v) params[k] = v;
       const { data: d } = await api.get('/report', { params });
       setData(d);
@@ -310,7 +331,7 @@ function ReportTab({ tab, reportTz }) {
     } finally {
       setLoading(false);
     }
-  }, [group, from, to, tz, sortBy, sortDir, entityId, subFilters, tab.entity]);
+  }, [group, from, to, tz, sortBy, sortDir, entityId, subFilters, entity]);
 
   useEffect(() => {
     run();
@@ -339,7 +360,12 @@ function ReportTab({ tab, reportTz }) {
     persist({ preset: null, from: toKey(f), to: toKey(t) });
   };
 
-  const columns = useMemo(() => COLUMNS.filter((c) => !hidden.has(c.key)), [hidden]);
+  // A tab may narrow the column set; Columns then offers only that set
+  const available = useMemo(
+    () => (tab.columns ? COLUMNS.filter((c) => tab.columns.includes(c.key)) : COLUMNS),
+    [tab.columns]
+  );
+  const columns = useMemo(() => available.filter((c) => !hidden.has(c.key)), [available, hidden]);
   const groupLabel = GROUPS.find((g) => g.id === group)?.label || group;
   const activeSubs = Object.entries(subFilters).filter(([, v]) => v);
   const entityName = entities.find((e) => String(e._id) === String(entityId))?.name;
@@ -375,6 +401,7 @@ function ReportTab({ tab, reportTz }) {
   };
 
   const reset = () => {
+    const today = toKey(new Date());
     setGroup(tab.group || 'day');
     setSubFilters({});
     setSortBy('clicks');
@@ -382,7 +409,10 @@ function ReportTab({ tab, reportTz }) {
     setHidden(new Set(DEFAULT_HIDDEN));
     setDensity('standard');
     setEntityId('');
-    applyPreset('today');
+    setEntityType('campaign');
+    setPreset('today');
+    setFrom(today);
+    setTo(today);
     persist({
       group: tab.group || 'day',
       subFilters: {},
@@ -391,6 +421,10 @@ function ReportTab({ tab, reportTz }) {
       hidden: [...DEFAULT_HIDDEN],
       density: 'standard',
       entityId: '',
+      entityType: 'campaign',
+      preset: 'today',
+      from: today,
+      to: today,
     });
   };
 
@@ -401,9 +435,29 @@ function ReportTab({ tab, reportTz }) {
       <div className="panel">
         <div className="panel-body">
           <div className="report-controls" ref={controlsRef}>
-            {tab.entity && (
+            {tab.entityChoice && (
               <label className="field">
-                <span>{tab.entity.label}</span>
+                <span>Narrow by</span>
+                <select
+                  value={entityType}
+                  onChange={(e) => {
+                    setEntityType(e.target.value);
+                    setEntityId(''); // ids from the old type mean nothing to the new one
+                    persist({ entityType: e.target.value, entityId: '' });
+                  }}
+                >
+                  {ENTITY_TYPES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {entity && (
+              <label className="field">
+                <span>{entity.label}</span>
                 <select
                   value={entityId}
                   onChange={(e) => {
@@ -421,25 +475,51 @@ function ReportTab({ tab, reportTz }) {
               </label>
             )}
 
-            <label className="field">
-              <span>Date</span>
-              <div className="date-nudge">
-                <select value={preset || ''} onChange={(e) => applyPreset(e.target.value)}>
-                  {!preset && <option value="">{`${from} → ${to}`}</option>}
-                  {RANGES.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" onClick={() => nudge(-1)} title="Previous period">
-                  ‹
-                </button>
-                <button type="button" onClick={() => nudge(1)} title="Next period">
-                  ›
-                </button>
-              </div>
-            </label>
+            {tab.singleDay ? (
+              <label className="field">
+                <span>Choose only 1 day</span>
+                <div className="date-nudge">
+                  <input
+                    type="date"
+                    value={from}
+                    onChange={(e) => {
+                      const d = e.target.value;
+                      if (!d) return;
+                      setPreset(null);
+                      setFrom(d);
+                      setTo(d);
+                      persist({ preset: null, from: d, to: d });
+                    }}
+                  />
+                  <button type="button" onClick={() => nudge(-1)} title="Previous day">
+                    ‹
+                  </button>
+                  <button type="button" onClick={() => nudge(1)} title="Next day">
+                    ›
+                  </button>
+                </div>
+              </label>
+            ) : (
+              <label className="field">
+                <span>Date</span>
+                <div className="date-nudge">
+                  <select value={preset || ''} onChange={(e) => applyPreset(e.target.value)}>
+                    {!preset && <option value="">{`${from} → ${to}`}</option>}
+                    {RANGES.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={() => nudge(-1)} title="Previous period">
+                    ‹
+                  </button>
+                  <button type="button" onClick={() => nudge(1)} title="Next period">
+                    ›
+                  </button>
+                </div>
+              </label>
+            )}
 
             <label className="field">
               <span>Time zone</span>
@@ -520,7 +600,7 @@ function ReportTab({ tab, reportTz }) {
             <Chip label={`Group: ${groupLabel}`} />
             <Chip label={`Sort by: ${sortBy} ${sortDir}`} />
             <Chip label={`Timezone: ${tz}`} />
-            {entityName && <Chip label={`${tab.entity.label}: ${entityName}`} onClear={() => setEntityId('')} />}
+            {entityName && <Chip label={`${entity.label}: ${entityName}`} onClear={() => setEntityId('')} />}
             {activeSubs.map(([k, v]) => (
               <Chip
                 key={k}
@@ -555,20 +635,22 @@ function ReportTab({ tab, reportTz }) {
             </button>
             {menu === 'cols' && (
               <div className="popover scroll" style={{ minWidth: 170 }}>
-                {COLUMNS.filter((c) => c.key !== 'label').map((c) => (
-                  /* preventDefault stops the browser forwarding the click to the
-                     checkbox, which would fire this handler twice and undo itself */
-                  <label
-                    key={c.key}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      toggleColumn(c.key);
-                    }}
-                  >
-                    <input type="checkbox" readOnly checked={!hidden.has(c.key)} style={{ width: 'auto' }} />
-                    {c.label}
-                  </label>
-                ))}
+                {available
+                  .filter((c) => c.key !== 'label')
+                  .map((c) => (
+                    /* preventDefault stops the browser forwarding the click to the
+                       checkbox, which would fire this handler twice and undo itself */
+                    <label
+                      key={c.key}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toggleColumn(c.key);
+                      }}
+                    >
+                      <input type="checkbox" readOnly checked={!hidden.has(c.key)} style={{ width: 'auto' }} />
+                      {c.label}
+                    </label>
+                  ))}
               </div>
             )}
           </div>
