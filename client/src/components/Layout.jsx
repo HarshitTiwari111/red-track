@@ -79,10 +79,15 @@ export function Page({ title, actions, children }) {
   return (
     <>
       <header className="topbar">
-        {/* Pages that render their own headline (the Dashboard) pass no title */}
-        {title ? <h1>{title}</h1> : <span />}
-        <div className="topbar-actions">
+        <div className="topbar-left">
+          {/* Pages that render their own headline (the Dashboard) pass no title */}
+          {title ? <h1>{title}</h1> : <span />}
+          {/* Beside the title, not among the actions: it says what you are
+              looking at, which belongs with the page name rather than the
+              controls that change it. */}
           <ViewAsPicker />
+        </div>
+        <div className="topbar-actions">
           {actions}
           <UserMenu />
         </div>
