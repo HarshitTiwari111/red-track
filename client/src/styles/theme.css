@@ -2687,3 +2687,64 @@ tr.pb-detail td {
   overflow-x: auto;
   white-space: nowrap;
 }
+
+/* ------------------------------------------------------------ filter grid */
+/* Equal cells so a long label never widens its own filter, and every field
+   sits on one baseline however many wrap onto the next line. */
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  gap: 20px 14px;
+  align-items: start;
+}
+.filter-grid .rt-field {
+  margin-bottom: 0;
+  min-width: 0;
+}
+/* An input and a select size differently from the same padding, which left the
+   text filters two pixels short of the dropdowns beside them. */
+.filter-grid .rt-field input,
+.filter-grid .rt-field select,
+.date-steps button {
+  height: 46px;
+}
+/* The date preset and its step arrows read as one control */
+.filter-date {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+  min-width: 0;
+}
+.filter-date .rt-field {
+  flex: 1;
+  min-width: 0;
+}
+.date-steps {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.date-steps button {
+  width: 32px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  font-family: inherit;
+}
+.date-steps button:hover {
+  color: var(--text);
+  border-color: var(--btn-hover-border);
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}

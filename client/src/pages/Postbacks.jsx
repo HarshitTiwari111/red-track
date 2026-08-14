@@ -243,36 +243,48 @@ export default function Postbacks() {
 
       <div className="panel">
         <div className="panel-body">
-          <div className="report-controls">
-            <Field label="Date">
-              <div className="date-nudge">
+          {/* A grid, not a wrapping flex row: every filter lands on the same
+              baseline and keeps the same width whatever the label says. */}
+          <div className="filter-grid">
+            <div className="filter-date">
+              {/* The label carries the resolved range, so the preset name in the
+                  field never leaves you guessing which days you are looking at */}
+              <Field label={`Date ${from} — ${to}`}>
                 <select value={preset || ''} onChange={(e) => applyPreset(e.target.value)}>
-                  {!preset && <option value="">{`${from} → ${to}`}</option>}
+                  {!preset && <option value="">Custom</option>}
                   {RANGES.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.label}
                     </option>
                   ))}
                 </select>
-                <button type="button" onClick={() => nudge(-1)} title="Previous period">
+              </Field>
+              <div className="date-steps">
+                <button type="button" onClick={() => nudge(-1)} title="Previous period" aria-label="Previous period">
                   ‹
                 </button>
-                <button type="button" onClick={() => nudge(1)} title="Next period">
+                <button type="button" onClick={() => nudge(1)} title="Next period" aria-label="Next period">
                   ›
                 </button>
               </div>
+            </div>
+
+            <Field label="Ref ID">
+              <input
+                type="text"
+                className="mono"
+                value={refId}
+                placeholder="any — partial ok"
+                onChange={(e) => setRefId(e.target.value)}
+              />
             </Field>
 
-            <Field label="Ref ID" hint="Partial is fine.">
-              <input type="text" className="mono" value={refId} placeholder="any" onChange={(e) => setRefId(e.target.value)} />
-            </Field>
-
-            <Field label="Click ID" hint="Partial is fine.">
+            <Field label="Click ID">
               <input
                 type="text"
                 className="mono"
                 value={clickid}
-                placeholder="any"
+                placeholder="any — partial ok"
                 onChange={(e) => setClickid(e.target.value)}
               />
             </Field>
@@ -309,17 +321,18 @@ export default function Postbacks() {
                 ))}
               </select>
             </Field>
+          </div>
 
+          <div className="filter-actions">
+            <button type="button" className="btn primary" onClick={load} disabled={loading}>
+              {loading ? <span className="spinner" /> : 'Apply'}
+            </button>
             <button
               type="button"
               className={`tool-btn ${onlyFailed ? 'on' : ''}`}
               onClick={() => setOnlyFailed((v) => !v)}
             >
               ⚑ Failed only
-            </button>
-
-            <button type="button" className="btn primary" onClick={load} disabled={loading}>
-              {loading ? <span className="spinner" /> : 'Apply'}
             </button>
 
             <span className="mute" style={{ marginLeft: 'auto', fontSize: 12 }}>
