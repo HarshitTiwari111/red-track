@@ -15,6 +15,7 @@ import Sources from './pages/Sources.jsx';
 import Networks from './pages/Networks.jsx';
 import ClicksLog from './pages/ClicksLog.jsx';
 import ConversionsLog from './pages/ConversionsLog.jsx';
+import ConversionTracking from './pages/ConversionTracking.jsx';
 import Settings from './pages/Settings.jsx';
 import Domains from './pages/Domains.jsx';
 import FunnelTemplates from './pages/FunnelTemplates.jsx';
@@ -56,6 +57,7 @@ export default function App() {
               <Route path="/networks" element={<Networks />} />
               <Route path="/clicks" element={<ClicksLog />} />
               <Route path="/conversions" element={<ConversionsLog />} />
+              <Route path="/conversion-tracking" element={<ConversionTracking />} />
               <Route path="/funnels" element={<FunnelTemplates />} />
               <Route path="/domains" element={<Domains />} />
               <Route path="/settings" element={<Settings />} />

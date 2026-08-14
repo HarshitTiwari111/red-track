@@ -31,10 +31,41 @@ export const DEFAULT_BOT_UA_PATTERNS = [
   'uptimerobot',
 ];
 
+/**
+ * How a repeat postback for a click that already converted is treated. These map
+ * straight onto the duplicateMode the conversion service already implements.
+ */
+export const CONVERSION_MODES = [
+  { id: 'create', label: 'Create new conversion: new or repeated' },
+  { id: 'update', label: 'Update the existing conversion' },
+  { id: 'ignore', label: 'Ignore repeated conversions' },
+];
+
+/** Optional reporting role a custom event name is counted as. */
+export const CONVERSION_ROLES = ['', 'lead', 'sale', 'deposit', 'upsell', 'rebill', 'custom'];
+
+const conversionTypeSchema = new mongoose.Schema(
+  {
+    name: { type: String, default: '', trim: true },
+    mode: { type: String, enum: CONVERSION_MODES.map((m) => m.id), default: 'create' },
+    role: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
 const settingsSchema = new mongoose.Schema(
   {
     // Single-document collection, always _id: 'global'
     _id: { type: String, default: 'global' },
+    /**
+     * Event names a postback may carry. The first entry is the default: anything
+     * arriving with an unrecognised type is recorded under it rather than being
+     * dropped, so a network misspelling its goal never loses a conversion.
+     */
+    conversionDefault: { type: conversionTypeSchema, default: () => ({ name: 'conversion', mode: 'create', role: '' }) },
+    conversionTypes: { type: [conversionTypeSchema], default: () => [] },
+    // Domain used when building the postback URLs shown on the tracking page
+    postbackDomainId: { type: mongoose.Schema.Types.ObjectId, ref: 'Domain', default: null },
     botUaPatterns: { type: [String], default: DEFAULT_BOT_UA_PATTERNS },
     blockedIpRanges: { type: [String], default: [] }, // CIDR or plain IP
     rawClickRetentionDays: { type: Number, default: 90 },

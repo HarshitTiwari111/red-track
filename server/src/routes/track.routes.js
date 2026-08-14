@@ -188,18 +188,67 @@ router.get('/postback', async (req, res) => {
       ip,
     });
 
+    // format=img lets the same URL be dropped into an <img> tag on a thank-you
+    // page, where a text body would render as a broken image.
+    if (str(req.query.format, 8) === 'img') return sendGif(res);
+
     return res
       .status(200)
       .type('text/plain')
       .send(result.ok ? 'OK' : `ERROR: ${result.reason}`);
   } catch (err) {
     logPostback({ ok: false, reason: err.message, ip, query: req.query, kind: 'postback' });
+    if (str(req.query.format, 8) === 'img') return sendGif(res);
     return res.status(200).type('text/plain').send('ERROR: internal');
   }
 });
 
+/**
+ * Drop-in for a thank-you page that already carries the click id in its URL:
+ *   <script src="https://track.example.com/postback.js"></script>
+ * It reads clickid (or the click cookie), plus an optional sum/txid/status, and
+ * fires the postback itself so the page owner writes no JavaScript.
+ */
+router.get('/postback.js', (req, res) => {
+  noStore(res);
+  res.type('application/javascript').send(`/* KAP Tracker - thank-you page postback */
+(function (w, d) {
+  'use strict';
+  var BASE = ${JSON.stringify(config.baseUrl)};
+  function qs(n) {
+    var m = new RegExp('[?&]' + n + '=([^&#]*)').exec(w.location.search);
+    return m ? decodeURIComponent(m[1].replace(/\\+/g, ' ')) : '';
+  }
+  function cookie(n) {
+    var m = d.cookie.match(new RegExp('(?:^|; )' + n + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  var clickid = qs('clickid') || qs('cid') || cookie('${CLICK_COOKIE}');
+  if (!clickid) {
+    if (w.console && w.console.warn) w.console.warn('[KAP] no clickid on this page');
+    return;
+  }
+  var url = BASE + '/postback?format=img&clickid=' + encodeURIComponent(clickid);
+  var pass = ['sum', 'payout', 'txid', 'status', 'type'];
+  for (var i = 0; i < pass.length; i++) {
+    var v = qs(pass[i]);
+    if (v) url += '&' + pass[i] + '=' + encodeURIComponent(v);
+  }
+  var img = new Image();
+  img.src = url;
+})(window, document);
+`);
+});
+
 /* --------------------------------------------------------------- /pixel.gif */
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+
+/** A declaration, not a const arrow, so /postback above can call it. */
+function sendGif(res) {
+  res.setHeader('Content-Type', 'image/gif');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  return res.status(200).send(GIF);
+}
 
 router.get('/pixel.gif', async (req, res) => {
   const ip = clientIp(req);

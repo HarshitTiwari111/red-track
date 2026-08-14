@@ -26,6 +26,7 @@ const NAV = [
     label: 'System',
     items: [
       { to: '/domains', icon: '🌐', text: 'Traffic domain' },
+      { to: '/conversion-tracking', icon: '⇄', text: 'Conversion tracking' },
       { to: '/settings', icon: '⚙', text: 'Settings' },
     ],
   },

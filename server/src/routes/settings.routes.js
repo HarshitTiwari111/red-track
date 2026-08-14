@@ -4,6 +4,9 @@ import User from '../models/User.js';
 import { asyncRoute } from '../middleware/error.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { getSettings, updateSettings } from '../services/settings.service.js';
+import { CONVERSION_MODES, CONVERSION_ROLES } from '../models/Settings.js';
+import Domain from '../models/Domain.js';
+import config from '../config/env.js';
 import { sendTelegram, telegramEnabled } from '../services/telegram.service.js';
 import { newApiKey } from '../utils/ids.js';
 import { str, num, bool, isObjectId, badRequest, notFound, oneOf } from '../utils/validate.js';
@@ -45,8 +48,84 @@ router.put(
     }
     if (b.telegramEnabled !== undefined) patch.telegramEnabled = bool(b.telegramEnabled, true);
 
+    /** Blank rows are how the operator removes an event, so they are dropped here. */
+    const cleanType = (t) => ({
+      name: str(t?.name, 60).trim(),
+      mode: oneOf(t?.mode, CONVERSION_MODES.map((m) => m.id), 'create'),
+      role: oneOf(t?.role, CONVERSION_ROLES, ''),
+    });
+
+    if (b.conversionDefault) {
+      const d = cleanType(b.conversionDefault);
+      if (!d.name) throw badRequest('The default conversion event needs a name');
+      patch.conversionDefault = d;
+    }
+    if (Array.isArray(b.conversionTypes)) {
+      const rows = b.conversionTypes.map(cleanType).filter((t) => t.name);
+      const seen = new Set();
+      for (const t of rows) {
+        const k = t.name.toLowerCase();
+        if (seen.has(k)) throw badRequest(`Duplicate conversion event: ${t.name}`);
+        seen.add(k);
+      }
+      patch.conversionTypes = rows.slice(0, 20);
+    }
+    if (b.postbackDomainId !== undefined) {
+      const id = str(b.postbackDomainId, 40);
+      if (id && !isObjectId(id)) throw badRequest('Invalid postback domain');
+      patch.postbackDomainId = id || null;
+    }
+
     const saved = await updateSettings(patch);
     res.json({ ...saved, telegramConfigured: telegramEnabled() });
+  })
+);
+
+/**
+ * Everything the conversion tracking page needs: the domains a postback can be
+ * sent to, and the ready-made URLs for each. Built server-side so the templates
+ * always match the endpoints that actually exist.
+ */
+router.get(
+  '/settings/conversion-tracking',
+  asyncRoute(async (req, res) => {
+    const settings = await getSettings({ force: true });
+    const domains = await Domain.find({}).sort({ isDefault: -1, host: 1 }).lean();
+
+    const chosen =
+      domains.find((d) => String(d._id) === String(settings.postbackDomainId)) ||
+      domains.find((d) => d.isDefault && d.status === 'active') ||
+      null;
+    const origin = chosen ? `${chosen.protocol}://${chosen.host}` : config.baseUrl;
+
+    const s2s = (extra = '') =>
+      `${origin}/postback?clickid={replace_me}&sum={replace_or_remove}${extra}`;
+    const pixel = (extra = '') =>
+      `<img src="${origin.replace(/^https?:/, '')}/postback?format=img&clickid={replace_me}&sum={replace_or_remove}${extra}" width="1" height="1" />`;
+
+    res.json({
+      domains: domains.map((d) => ({ _id: d._id, host: d.host, url: `${d.protocol}://${d.host}`, status: d.status })),
+      selectedDomainId: chosen ? String(chosen._id) : null,
+      defaultOrigin: config.baseUrl,
+      origin,
+      s2s: {
+        conversion: s2s(),
+        pending: s2s('&status=pending'),
+        approved: s2s('&status=approved'),
+        declined: s2s('&status=rejected'),
+        other: s2s('&status=pending'),
+      },
+      pixel: {
+        conversion: pixel(),
+        pending: pixel('&status=pending'),
+        approved: pixel('&status=approved'),
+        declined: pixel('&status=rejected'),
+        other: pixel('&status=pending'),
+      },
+      script: `<script type="text/javascript" src="${origin.replace(/^https?:/, '')}/postback.js"></script>`,
+      modes: CONVERSION_MODES,
+      roles: CONVERSION_ROLES,
+    });
   })
 );
 

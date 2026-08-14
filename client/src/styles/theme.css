@@ -2583,3 +2583,48 @@ td.neg {
   margin-bottom: 4px;
   font-size: 13px;
 }
+
+/* ------------------------------------------------------ conversion tracking */
+.ct-builder-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+/* Type / Mode / Role, one event per line */
+.ct-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.4fr) minmax(130px, 0.8fr);
+  gap: 0 14px;
+}
+.ct-grid .rt-field {
+  margin-bottom: 12px;
+}
+.ct-toggle {
+  margin: 12px 0 14px;
+}
+/* Copyable template: the button sits beside the field, not inside it */
+.ct-copy {
+  display: grid;
+  grid-template-columns: 1fr 34px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.ct-copy .rt-label {
+  grid-column: 1 / -1;
+}
+.ct-copy input {
+  font-size: 12px;
+}
+.ct-copy .icon-btn {
+  height: 34px;
+  width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+@media (max-width: 900px) {
+  .ct-grid {
+    grid-template-columns: 1fr;
+  }
+}

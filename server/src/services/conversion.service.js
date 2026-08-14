@@ -6,6 +6,7 @@ import { getOffer, getNetworkById, getCampaignById, getSource } from './cache.se
 import { incConversion } from './stats.service.js';
 import { fireForwards } from './forward.service.js';
 import { buildMacroContext } from './macro.service.js';
+import { getSettingsSync } from './settings.service.js';
 import { str, num, oneOf } from '../utils/validate.js';
 import logger from '../utils/logger.js';
 
@@ -108,11 +109,25 @@ export async function recordConversion({ clickid, payout, txid, status, type, ne
     'approved'
   );
   const finalStatus = oneOf(str(status, 24).toLowerCase(), CONV_STATUSES, fallbackStatus);
-  const finalType = str(type, 24).toLowerCase() || 'lead';
+
+  /**
+   * Event names are configured in Settings. Anything else is recorded under the
+   * default event rather than dropped - a network misspelling its goal should
+   * cost a label, not a conversion.
+   */
+  const settings = getSettingsSync();
+  const configured = [settings.conversionDefault, ...(settings.conversionTypes || [])].filter((t) => t?.name);
+  const asked = str(type, 60).toLowerCase();
+  const matched = configured.find((t) => t.name.toLowerCase() === asked);
+  const defaultType = settings.conversionDefault?.name || 'conversion';
+  const finalType = matched ? matched.name : asked && !configured.length ? asked : defaultType;
+
   let tx = str(txid, 128);
 
   // --- dedupe / status update -------------------------------------------------
-  const duplicateMode = DUPLICATE_MODES.includes(network?.duplicateMode) ? network.duplicateMode : 'update';
+  // The matched event may override how repeats are treated for that event only
+  const networkMode = DUPLICATE_MODES.includes(network?.duplicateMode) ? network.duplicateMode : 'update';
+  const duplicateMode = matched && DUPLICATE_MODES.includes(matched.mode) ? matched.mode : networkMode;
 
   if (tx && networkId) {
     const existing = await Conversion.findOne({ networkId, txid: tx });
