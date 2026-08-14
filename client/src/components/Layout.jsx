@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import UserMenu from './UserMenu.jsx';
+import ViewAsPicker from './ViewAsPicker.jsx';
 
 const NAV = [
   {
@@ -81,6 +82,7 @@ export function Page({ title, actions, children }) {
         {/* Pages that render their own headline (the Dashboard) pass no title */}
         {title ? <h1>{title}</h1> : <span />}
         <div className="topbar-actions">
+          <ViewAsPicker />
           {actions}
           <UserMenu />
         </div>

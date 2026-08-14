@@ -2748,3 +2748,55 @@ tr.pb-detail td {
   padding-top: 16px;
   border-top: 1px solid var(--border-soft);
 }
+
+/* ------------------------------------------------------------- view as user */
+/* Quiet while off, loud while on: every figure on every page changes meaning
+   when this is set, so it must not be possible to leave it on unnoticed. */
+.viewas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--panel);
+}
+.viewas-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-mute);
+  white-space: nowrap;
+}
+.viewas select {
+  width: auto;
+  height: 28px;
+  padding: 0 26px 0 8px;
+  font-size: 12.5px;
+  border: none;
+  background-color: transparent;
+}
+.viewas.on {
+  border-color: var(--amber);
+  background: rgba(255, 176, 32, 0.12);
+}
+.viewas.on .viewas-label {
+  color: var(--amber);
+  font-weight: 700;
+}
+.viewas.on select {
+  color: var(--text);
+  font-weight: 600;
+}
+.viewas-clear {
+  background: none;
+  border: none;
+  color: var(--amber);
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+  padding: 0 6px 0 0;
+}
+.viewas-clear:hover {
+  color: var(--red);
+}

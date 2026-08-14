@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 import { DateRangeProvider } from './components/DateRangePicker.jsx';
+import { ViewAsProvider } from './context/ViewAsContext.jsx';
 import Layout from './components/Layout.jsx';
 
 import Login from './pages/Login.jsx';
@@ -38,7 +39,8 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <DateRangeProvider>
+        <ViewAsProvider>
+          <DateRangeProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route
@@ -66,7 +68,8 @@ export default function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </DateRangeProvider>
+          </DateRangeProvider>
+        </ViewAsProvider>
       </AuthProvider>
     </ThemeProvider>
   );

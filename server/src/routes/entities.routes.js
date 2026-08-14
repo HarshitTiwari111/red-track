@@ -1,5 +1,6 @@
 import express from 'express';
 import crudRouter from './crudFactory.js';
+import { ownerFilter, ownerOnCreate, ownsDoc } from '../middleware/scope.js';
 import TrafficSource, { PARAM_ROLES } from '../models/TrafficSource.js';
 import { catalogSummary, getCatalogEntry } from '../services/sourceCatalog.service.js';
 import AffiliateNetwork, { POSTBACK_ROLES, DUPLICATE_MODES } from '../models/AffiliateNetwork.js';
@@ -17,7 +18,7 @@ import { runReport } from '../services/report.service.js';
 import { getSettingsSync } from '../services/settings.service.js';
 import { parseRange } from '../utils/time.js';
 import { newSecurityKey, slugify } from '../utils/ids.js';
-import { badRequest, isHttpUrl, isObjectId, str, notFound } from '../utils/validate.js';
+import { badRequest, isHttpUrl, isObjectId, str, notFound , forbidden} from '../utils/validate.js';
 import { MACRO_LIST } from '../services/macro.service.js';
 
 const router = express.Router();
@@ -93,7 +94,7 @@ router.post(
 router.get(
   '/sources/table',
   asyncRoute(async (req, res) => {
-    const q = {};
+    const q = { ...ownerFilter(req) };
     if (req.query.title) {
       q.name = new RegExp(String(req.query.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     }
@@ -163,6 +164,7 @@ router.post(
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
     const src = await TrafficSource.findById(req.params.id).lean();
     if (!src) throw notFound();
+    if (!ownsDoc(req, src)) throw forbidden();
     const { _id, createdAt, updatedAt, name, slug, ...rest } = src;
     const clone = await TrafficSource.create({
       ...rest,
@@ -185,9 +187,9 @@ router.post(
     let result;
     if (action === 'status') {
       const status = req.body?.status === 'paused' ? 'paused' : 'active';
-      result = await TrafficSource.updateMany({ _id: { $in: ids } }, { $set: { status } });
+      result = await TrafficSource.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $set: { status } });
     } else if (action === 'delete') {
-      result = await TrafficSource.deleteMany({ _id: { $in: ids } });
+      result = await TrafficSource.deleteMany({ _id: { $in: ids }, ...ownerFilter(req) });
     } else {
       throw badRequest('Unknown bulk action');
     }
@@ -283,7 +285,7 @@ router.post(
 router.get(
   '/networks/table',
   asyncRoute(async (req, res) => {
-    const q = {};
+    const q = { ...ownerFilter(req) };
     if (req.query.title) {
       q.name = new RegExp(String(req.query.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     }
@@ -362,6 +364,7 @@ router.post(
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
     const src = await AffiliateNetwork.findById(req.params.id).lean();
     if (!src) throw notFound();
+    if (!ownsDoc(req, src)) throw forbidden();
     const { _id, createdAt, updatedAt, name, postbackSecurityKey, ...rest } = src;
     const clone = await AffiliateNetwork.create({
       ...rest,
@@ -384,9 +387,9 @@ router.post(
     let result;
     if (action === 'status') {
       const status = req.body?.status === 'paused' ? 'paused' : 'active';
-      result = await AffiliateNetwork.updateMany({ _id: { $in: ids } }, { $set: { status } });
+      result = await AffiliateNetwork.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $set: { status } });
     } else if (action === 'delete') {
-      result = await AffiliateNetwork.deleteMany({ _id: { $in: ids } });
+      result = await AffiliateNetwork.deleteMany({ _id: { $in: ids }, ...ownerFilter(req) });
     } else {
       throw badRequest('Unknown bulk action');
     }
@@ -447,7 +450,7 @@ const afterOfferWrite = async () => {
 router.get(
   '/offers/table',
   asyncRoute(async (req, res) => {
-    const q = {};
+    const q = { ...ownerFilter(req) };
     if (req.query.title) {
       q.name = new RegExp(String(req.query.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     }
@@ -525,8 +528,9 @@ router.post(
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
     const src = await Offer.findById(req.params.id).lean();
     if (!src) throw notFound();
+    if (!ownsDoc(req, src)) throw forbidden();
     const { _id, createdAt, updatedAt, ...rest } = src;
-    const clone = await Offer.create({ ...rest, name: `${src.name} (copy)`, status: 'paused' });
+    const clone = await Offer.create({ ...rest, name: `${src.name} (copy)`, status: 'paused', ownerId: ownerOnCreate(req, {}) });
     await afterOfferWrite();
     res.status(201).json(clone.toObject());
   })
@@ -543,17 +547,17 @@ router.post(
     let result;
     if (action === 'status') {
       const status = req.body?.status === 'paused' ? 'paused' : 'active';
-      result = await Offer.updateMany({ _id: { $in: ids } }, { $set: { status } });
+      result = await Offer.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $set: { status } });
     } else if (action === 'addTags' || action === 'setTags') {
       const tags = (Array.isArray(req.body?.tags) ? req.body.tags : [])
         .map((t) => str(t, 40))
         .filter(Boolean);
       result =
         action === 'setTags'
-          ? await Offer.updateMany({ _id: { $in: ids } }, { $set: { tags } })
-          : await Offer.updateMany({ _id: { $in: ids } }, { $addToSet: { tags: { $each: tags } } });
+          ? await Offer.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $set: { tags } })
+          : await Offer.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $addToSet: { tags: { $each: tags } } });
     } else if (action === 'delete') {
-      result = await Offer.deleteMany({ _id: { $in: ids } });
+      result = await Offer.deleteMany({ _id: { $in: ids }, ...ownerFilter(req) });
     } else {
       throw badRequest('Unknown bulk action');
     }
@@ -580,7 +584,7 @@ const normalizeLander = async (body) => {
 router.get(
   '/landers/table',
   asyncRoute(async (req, res) => {
-    const q = {};
+    const q = { ...ownerFilter(req) };
     if (req.query.title) {
       q.name = new RegExp(String(req.query.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     }
@@ -654,8 +658,9 @@ router.post(
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
     const src = await Lander.findById(req.params.id).lean();
     if (!src) throw notFound();
+    if (!ownsDoc(req, src)) throw forbidden();
     const { _id, createdAt, updatedAt, ...rest } = src;
-    const clone = await Lander.create({ ...rest, name: `${src.name} (copy)`, status: 'paused' });
+    const clone = await Lander.create({ ...rest, name: `${src.name} (copy)`, status: 'paused', ownerId: ownerOnCreate(req, {}) });
     await refreshCache();
     res.status(201).json(clone.toObject());
   })
@@ -671,15 +676,15 @@ router.post(
     let result;
     if (action === 'status') {
       const status = req.body?.status === 'paused' ? 'paused' : 'active';
-      result = await Lander.updateMany({ _id: { $in: ids } }, { $set: { status } });
+      result = await Lander.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $set: { status } });
     } else if (action === 'addTags' || action === 'setTags') {
       const tags = (Array.isArray(req.body?.tags) ? req.body.tags : []).map((t) => str(t, 40)).filter(Boolean);
       result =
         action === 'setTags'
-          ? await Lander.updateMany({ _id: { $in: ids } }, { $set: { tags } })
-          : await Lander.updateMany({ _id: { $in: ids } }, { $addToSet: { tags: { $each: tags } } });
+          ? await Lander.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $set: { tags } })
+          : await Lander.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $addToSet: { tags: { $each: tags } } });
     } else if (action === 'delete') {
-      result = await Lander.deleteMany({ _id: { $in: ids } });
+      result = await Lander.deleteMany({ _id: { $in: ids }, ...ownerFilter(req) });
     } else {
       throw badRequest('Unknown bulk action');
     }
@@ -730,6 +735,7 @@ router.post(
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
     const src = await FunnelTemplate.findById(req.params.id).lean();
     if (!src) throw notFound();
+    if (!ownsDoc(req, src)) throw forbidden();
     const { _id, createdAt, updatedAt, name, ...rest } = src;
     const clone = await FunnelTemplate.create({ ...rest, name: `${name} (copy)` });
     res.status(201).json(clone.toObject());
@@ -742,7 +748,7 @@ router.post(
     const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(isObjectId);
     if (!ids.length) throw badRequest('Select at least one funnel template');
     if (str(req.body?.action, 24) !== 'delete') throw badRequest('Unknown bulk action');
-    const result = await FunnelTemplate.deleteMany({ _id: { $in: ids } });
+    const result = await FunnelTemplate.deleteMany({ _id: { $in: ids }, ...ownerFilter(req) });
     res.json({ ok: true, matched: result.deletedCount || 0 });
   })
 );
@@ -819,7 +825,7 @@ const numOrNull = (v) => {
 router.get(
   '/campaigns/table',
   asyncRoute(async (req, res) => {
-    const q = {};
+    const q = { ...ownerFilter(req) };
     if (req.query.title) {
       q.name = new RegExp(String(req.query.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     }
@@ -892,6 +898,7 @@ router.post(
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
     const src = await Campaign.findById(req.params.id).lean();
     if (!src) throw notFound();
+    if (!ownsDoc(req, src)) throw forbidden();
     const { _id, createdAt, updatedAt, slug, name, ...rest } = src;
 
     // Slugs are unique, so find a free one before inserting the copy
@@ -924,15 +931,15 @@ router.post(
     let result;
     if (action === 'status') {
       const status = req.body?.status === 'paused' ? 'paused' : 'active';
-      result = await Campaign.updateMany({ _id: { $in: ids } }, { $set: { status } });
+      result = await Campaign.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $set: { status } });
     } else if (action === 'addTags' || action === 'setTags') {
       const tags = (Array.isArray(req.body?.tags) ? req.body.tags : []).map((t) => str(t, 40)).filter(Boolean);
       result =
         action === 'setTags'
-          ? await Campaign.updateMany({ _id: { $in: ids } }, { $set: { tags } })
-          : await Campaign.updateMany({ _id: { $in: ids } }, { $addToSet: { tags: { $each: tags } } });
+          ? await Campaign.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $set: { tags } })
+          : await Campaign.updateMany({ _id: { $in: ids }, ...ownerFilter(req) }, { $addToSet: { tags: { $each: tags } } });
     } else if (action === 'delete') {
-      result = await Campaign.deleteMany({ _id: { $in: ids } });
+      result = await Campaign.deleteMany({ _id: { $in: ids }, ...ownerFilter(req) });
     } else {
       throw badRequest('Unknown bulk action');
     }
@@ -951,6 +958,7 @@ router.get(
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
     const campaign = await Campaign.findById(req.params.id).lean();
     if (!campaign) throw notFound();
+    if (!ownsDoc(req, campaign)) throw forbidden();
 
     const source = campaign.trafficSourceId
       ? await TrafficSource.findById(campaign.trafficSourceId).lean()

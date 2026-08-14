@@ -18,7 +18,7 @@ export function lockedCors(req, res, next) {
   if (origin && origin === config.baseUrl) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, X-View-As');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);

@@ -6,6 +6,21 @@ export const api = axios.create({
   timeout: 30000,
 });
 
+/**
+ * When an admin is looking at the dashboard as one user, every request carries
+ * that choice. Set here rather than per-page so a page cannot forget it. The
+ * server ignores the header for anyone who is not an admin.
+ */
+api.interceptors.request.use((cfg) => {
+  try {
+    const as = localStorage.getItem('kap.viewAs');
+    if (as) cfg.headers['X-View-As'] = as;
+  } catch {
+    /* private mode - just send the request unscoped */
+  }
+  return cfg;
+});
+
 // Any 401 outside the login call means the session is gone - bounce to /login.
 api.interceptors.response.use(
   (res) => res,

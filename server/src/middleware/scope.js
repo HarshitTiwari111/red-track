@@ -1,5 +1,5 @@
 import Campaign from '../models/Campaign.js';
-import { toObjectId } from '../utils/validate.js';
+import { toObjectId, isObjectId } from '../utils/validate.js';
 
 /**
  * Two roles, one rule: an admin sees everything, a user sees only what they own.
@@ -9,10 +9,30 @@ import { toObjectId } from '../utils/validate.js';
  */
 export const isAdmin = (req) => req.user?.role === 'admin';
 
+/**
+ * An admin may narrow the whole dashboard to one user with the X-View-As header,
+ * so every page answers as that user without anyone sharing a password. It is a
+ * view filter, not a role change: the admin keeps admin rights while it is on,
+ * and the header is ignored outright for anyone who is not an admin.
+ */
+export function viewingAs(req) {
+  if (!isAdmin(req)) return null;
+  const id = req.get('x-view-as');
+  return id && isObjectId(id) ? toObjectId(id) : null;
+}
+
+/** The account whose data this request should see, or null for "everyone". */
+function effectiveOwner(req) {
+  const as = viewingAs(req);
+  if (as) return as;
+  if (isAdmin(req)) return null;
+  return toObjectId(req.user?.uid) || null;
+}
+
 /** Mongo filter fragment for a collection that carries ownerId. */
 export function ownerFilter(req) {
-  if (isAdmin(req)) return {};
-  return { ownerId: toObjectId(req.user?.uid) || null };
+  const owner = effectiveOwner(req);
+  return owner === null ? {} : { ownerId: owner };
 }
 
 /** Stamp on create. Admins may hand a record to someone else. */
@@ -34,8 +54,9 @@ export const ownsDoc = (req, doc) =>
  * must apply the returned array even when it is empty.
  */
 export async function ownedCampaignIds(req) {
-  if (isAdmin(req)) return null;
-  const rows = await Campaign.find({ ownerId: toObjectId(req.user?.uid) || null }, { _id: 1 }).lean();
+  const owner = effectiveOwner(req);
+  if (owner === null) return null;
+  const rows = await Campaign.find({ ownerId: owner }, { _id: 1 }).lean();
   return rows.map((r) => r._id);
 }
 
