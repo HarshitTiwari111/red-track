@@ -111,16 +111,18 @@ export async function recordConversion({ clickid, payout, txid, status, type, ne
   const finalStatus = oneOf(str(status, 24).toLowerCase(), CONV_STATUSES, fallbackStatus);
 
   /**
-   * Event names are configured in Settings. Anything else is recorded under the
-   * default event rather than dropped - a network misspelling its goal should
-   * cost a label, not a conversion.
+   * Event naming has two modes. With no declared list - the normal case - the
+   * name the network sends is kept as-is. Once a list IS declared, it becomes
+   * the allowed set and anything outside it lands on the default event rather
+   * than being stored under a name nobody configured; a network misspelling its
+   * goal should cost a label, not a conversion.
    */
   const settings = getSettingsSync();
-  const configured = [settings.conversionDefault, ...(settings.conversionTypes || [])].filter((t) => t?.name);
+  const declared = (settings.conversionTypes || []).filter((t) => t?.name);
   const asked = str(type, 60).toLowerCase();
-  const matched = configured.find((t) => t.name.toLowerCase() === asked);
+  const matched = declared.find((t) => t.name.toLowerCase() === asked);
   const defaultType = settings.conversionDefault?.name || 'conversion';
-  const finalType = matched ? matched.name : asked && !configured.length ? asked : defaultType;
+  const finalType = matched ? matched.name : declared.length ? defaultType : asked || defaultType;
 
   let tx = str(txid, 128);
 
