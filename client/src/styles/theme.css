@@ -391,6 +391,25 @@ h1, h2, h3, h4 {
   flex: 1;
 }
 
+/* A page's own name and controls, at the top of its content */
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.page-head h1 {
+  font-size: 22px;
+  letter-spacing: -0.015em;
+}
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .page-section {
   margin-bottom: 22px;
 }

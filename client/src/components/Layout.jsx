@@ -78,21 +78,26 @@ export default function Layout() {
 export function Page({ title, actions, children }) {
   return (
     <>
+      {/* The bar carries only what belongs to the session - whose data is shown,
+          and who is signed in. A page's own name and controls live on the page. */}
       <header className="topbar">
         <div className="topbar-left">
-          {/* Pages that render their own headline (the Dashboard) pass no title */}
-          {title ? <h1>{title}</h1> : <span />}
-          {/* Beside the title, not among the actions: it says what you are
-              looking at, which belongs with the page name rather than the
-              controls that change it. */}
           <ViewAsPicker />
         </div>
         <div className="topbar-actions">
-          {actions}
           <UserMenu />
         </div>
       </header>
-      <div className="page">{children}</div>
+      <div className="page">
+        {/* The Dashboard renders its own headline, so it passes no title */}
+        {(title || actions) && (
+          <div className="page-head">
+            {title ? <h1>{title}</h1> : <span />}
+            {actions && <div className="page-actions">{actions}</div>}
+          </div>
+        )}
+        {children}
+      </div>
     </>
   );
 }
