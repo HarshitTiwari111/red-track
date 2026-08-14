@@ -2155,8 +2155,10 @@ table.data tfoot td.total-label {
 }
 
 /* -------------------------------------------------- campaign modal layout */
+/* Two columns need the room, but 1240px filled a 1280px screen edge to edge.
+   1040px keeps both columns above the 980px collapse point with margin to spare. */
 .modal.full {
-  max-width: 1240px;
+  max-width: 1040px;
 }
 .modal-head-actions {
   display: flex;
