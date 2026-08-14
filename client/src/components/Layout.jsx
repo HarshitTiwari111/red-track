@@ -7,11 +7,11 @@ const NAV = [
     label: 'Analytics',
     items: [
       { to: '/', icon: '◫', text: 'Dashboard', end: true },
-      { to: '/reports', icon: '▥', text: 'Reports' },
       { to: '/campaigns', icon: '◈', text: 'Campaigns' },
-      { to: '/clicks', icon: '⇢', text: 'Clicks Log' },
       { to: '/conversions', icon: '✓', text: 'Conversions' },
+      { to: '/reports', icon: '▥', text: 'Reports' },
       { to: '/postbacks', icon: '⇠', text: 'Postbacks' },
+      { to: '/clicks', icon: '⇢', text: 'Clicks Log' },
     ],
   },
   {
