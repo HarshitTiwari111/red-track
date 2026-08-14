@@ -2663,3 +2663,27 @@ tr.pb-detail td {
   color: var(--red);
   font-style: italic;
 }
+
+/* Pagination bar under a log table */
+.table-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 11px 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.table-foot select {
+  width: auto;
+  height: 30px;
+  font-size: 12.5px;
+}
+.pb-url {
+  font-size: 11.5px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  overflow-x: auto;
+  white-space: nowrap;
+}

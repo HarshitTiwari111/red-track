@@ -186,6 +186,7 @@ router.get('/postback', async (req, res) => {
       rawQuery: req.query,
       source: 'postback',
       ip,
+      url: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
     });
 
     // format=img lets the same URL be dropped into an <img> tag on a thank-you
@@ -270,6 +271,7 @@ router.get('/pixel.gif', async (req, res) => {
       rawQuery: req.query,
       source: 'pixel',
       ip,
+      url: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
     });
   } catch (err) {
     logPostback({ ok: false, reason: err.message, ip, query: req.query, kind: 'pixel' });

@@ -223,10 +223,17 @@ router.get(
     }
     if (req.query.ok !== undefined && req.query.ok !== '') q.ok = bool(req.query.ok);
     if (req.query.kind) q.kind = str(req.query.kind, 16);
+    if (req.query.type) q.type = str(req.query.type, 60);
+    if (req.query.campaignId && isObjectId(req.query.campaignId)) q.campaignId = toObjectId(req.query.campaignId);
+    if (req.query.source) q.source = str(req.query.source, 80);
 
-    // Partial click id is the usual way in: you have it from the ad platform
+    // Both ids are usually copied out of an ad platform or a network report,
+    // so a partial paste has to work rather than demanding the whole string
+    const like = (v) => ({ $regex: String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' });
     const cid = str(req.query.clickid, 64);
-    if (cid) q.clickid = { $regex: cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    if (cid) q.clickid = like(cid);
+    const ref = str(req.query.refId, 128);
+    if (ref) q.refId = like(ref);
 
     const items = await PostbackLog.find(q)
       .sort({ ts: -1 })
@@ -236,10 +243,20 @@ router.get(
     const rows = items.map((d) => ({
       ...d,
       networkName: d.networkId ? getNetworkById(d.networkId)?.name || '' : '',
+      campaignName: d.campaignId ? getCampaignById(d.campaignId)?.name || '' : '',
+      offerName: d.offerId ? getOffer(d.offerId)?.name || '' : '',
     }));
 
     const failed = rows.filter((r) => !r.ok).length;
-    res.json({ items: rows, count: rows.length, failed, retentionDays: 14 });
+    res.json({
+      items: rows,
+      count: rows.length,
+      failed,
+      retentionDays: 14,
+      // Only the values actually present in the log are worth offering as filters
+      types: [...new Set(items.map((d) => d.type).filter(Boolean))].sort(),
+      sources: [...new Set(items.map((d) => d.source).filter(Boolean))].sort(),
+    });
   })
 );
 

@@ -39,10 +39,37 @@ export function logPostback(doc) {
  * so a network never sees an error and retries forever.
  * @returns {{ok:boolean, reason?:string, conversion?:object, duplicate?:boolean, updated?:boolean}}
  */
-export async function recordConversion({ clickid, payout, txid, status, type, network, rawQuery, source = 'postback', ip = '' }) {
+export async function recordConversion({
+  clickid,
+  payout,
+  txid,
+  status,
+  type,
+  network,
+  rawQuery,
+  source = 'postback',
+  ip = '',
+  url = '',
+}) {
   const cid = str(clickid, 64);
+
+  /**
+   * Every log line below carries whatever context is known at that point. The
+   * context grows as the click and offer resolve, so it is held in one object
+   * and merged in rather than repeated at each of the fourteen call sites.
+   */
+  const ctx = {
+    ip,
+    query: rawQuery,
+    kind: source,
+    url: str(url, 2048),
+    refId: str(txid, 128),
+    type: str(type, 60),
+  };
+  const log = (fields) => logPostback({ ...ctx, ...fields });
+
   if (!cid) {
-    logPostback({ ok: false, reason: 'missing clickid', ip, query: rawQuery, kind: source });
+    log({ ok: false, reason: 'missing clickid' });
     return { ok: false, reason: 'missing clickid' };
   }
 
@@ -50,29 +77,33 @@ export async function recordConversion({ clickid, payout, txid, status, type, ne
   if (network?.whitelistedIps?.enabled) {
     const allowed = network.whitelistedIps.ips || [];
     if (allowed.length && !allowed.includes(ip)) {
-      logPostback({ ok: false, reason: `ip ${ip} not whitelisted`, clickid: cid, networkId: network._id, ip, query: rawQuery, kind: source });
+      log({ ok: false, reason: `ip ${ip} not whitelisted`, clickid: cid, networkId: network._id });
       return { ok: false, reason: 'ip not allowed' };
     }
   }
 
   const click = await Click.findOne({ clickid: cid }).lean();
   if (!click) {
-    logPostback({ ok: false, reason: 'unknown clickid', clickid: cid, ip, query: rawQuery, kind: source });
+    log({ ok: false, reason: 'unknown clickid', clickid: cid });
     return { ok: false, reason: 'unknown clickid' };
   }
+
+  // From here on every log line can name the campaign, offer and channel it hit
+  Object.assign(ctx, {
+    campaignId: click.campaignId || null,
+    offerId: click.offerId || null,
+    source: click.source || '',
+  });
 
   // Attribution window: a conversion arriving long after the click is not ours
   if (network?.clickExpiration?.enabled && network.clickExpiration.days > 0 && click.ts) {
     const ageDays = (Date.now() - new Date(click.ts).getTime()) / 86400000;
     if (ageDays > network.clickExpiration.days) {
-      logPostback({
+      log({
         ok: false,
         reason: `click expired (${Math.floor(ageDays)}d > ${network.clickExpiration.days}d)`,
         clickid: cid,
         networkId: network._id,
-        ip,
-        query: rawQuery,
-        kind: source,
       });
       return { ok: false, reason: 'click expired' };
     }
@@ -86,14 +117,11 @@ export async function recordConversion({ clickid, payout, txid, status, type, ne
   if (!network && networkId) {
     const owner = getNetworkById(networkId);
     if (owner?.postbackProtection?.enabled) {
-      logPostback({
+      log({
         ok: false,
         reason: 'security key required by this offer source',
         clickid: cid,
         networkId,
-        ip,
-        query: rawQuery,
-        kind: source,
       });
       return { ok: false, reason: 'security key required' };
     }
@@ -151,14 +179,11 @@ export async function recordConversion({ clickid, payout, txid, status, type, ne
         // Count the repeat so the grid can show a real "duplicate" status
         existing.duplicateHits = (existing.duplicateHits || 0) + 1;
         await existing.save();
-        logPostback({
+        log({
           ok: true,
           reason: 'duplicate ignored',
           clickid: cid,
           networkId,
-          ip,
-          query: rawQuery,
-          kind: source,
         });
         return { ok: true, duplicate: true, conversion: existing.toObject() };
       }
@@ -175,14 +200,11 @@ export async function recordConversion({ clickid, payout, txid, status, type, ne
         revenueDelta: after.rev - before.rev,
       });
 
-      logPostback({
+      log({
         ok: true,
         reason: `status updated -> ${finalStatus}`,
         clickid: cid,
         networkId,
-        ip,
-        query: rawQuery,
-        kind: source,
       });
       return { ok: true, updated: true, conversion: existing.toObject() };
     }
@@ -227,11 +249,11 @@ export async function recordConversion({ clickid, payout, txid, status, type, ne
     });
   } catch (err) {
     if (err.code === 11000) {
-      logPostback({ ok: true, reason: 'duplicate txid', clickid: cid, networkId, ip, query: rawQuery, kind: source });
+      log({ ok: true, reason: 'duplicate txid', clickid: cid, networkId });
       return { ok: true, duplicate: true };
     }
     logger.warn('conversion insert failed:', err.message);
-    logPostback({ ok: false, reason: err.message, clickid: cid, networkId, ip, query: rawQuery, kind: source });
+    log({ ok: false, reason: err.message, clickid: cid, networkId });
     return { ok: false, reason: err.message };
   }
 
@@ -262,7 +284,7 @@ export async function recordConversion({ clickid, payout, txid, status, type, ne
     );
   }
 
-  logPostback({ ok: true, reason: 'conversion recorded', clickid: cid, networkId, ip, query: rawQuery, kind: source });
+  log({ ok: true, reason: 'conversion recorded', clickid: cid, networkId });
   return { ok: true, conversion: created.toObject() };
 }
 
