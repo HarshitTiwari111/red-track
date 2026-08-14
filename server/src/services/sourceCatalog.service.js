@@ -146,11 +146,20 @@ export const SOURCE_CATALOG = [
   },
 ];
 
-export const getCatalogEntry = (id) => SOURCE_CATALOG.find((c) => c.id === id) || null;
+/**
+ * Which templates the picker actually offers. The rest stay defined above
+ * rather than deleted: their parameter names and macros are the fiddly part,
+ * and turning one back on is then a single id here.
+ */
+const OFFERED = new Set(['google-ads', 'facebook']);
+
+/** Creating from a template is limited to the same set as the picker. */
+export const getCatalogEntry = (id) =>
+  (OFFERED.has(id) && SOURCE_CATALOG.find((c) => c.id === id)) || null;
 
 /** Catalog list for the picker - the full template stays server-side. */
 export const catalogSummary = () =>
-  SOURCE_CATALOG.map((c) => ({
+  SOURCE_CATALOG.filter((c) => OFFERED.has(c.id)).map((c) => ({
     id: c.id,
     name: c.name,
     description: c.description,
