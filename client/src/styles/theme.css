@@ -2418,3 +2418,158 @@ table.data tfoot td.total-label {
     padding: 0 14px;
   }
 }
+
+/* ------------------------------------------------------------------ reports */
+.report-tabs {
+  margin-bottom: 16px;
+}
+.report-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+.report-controls .field {
+  margin-bottom: 0;
+  min-width: 172px;
+}
+.report-controls .tool-btn,
+.report-controls .btn {
+  height: 34px;
+}
+.tool-btn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* Date preset plus the two step-a-period-at-a-time arrows */
+.date-nudge {
+  display: flex;
+  gap: 4px;
+}
+.date-nudge select {
+  flex: 1;
+}
+.date-nudge button {
+  width: 28px;
+  flex: 0 0 auto;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+.date-nudge button:hover {
+  color: var(--text);
+  border-color: var(--btn-hover-border);
+}
+
+.report-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--border-soft);
+}
+.report-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 11px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.report-chip button {
+  background: none;
+  border: none;
+  color: var(--text-mute);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+.report-chip button:hover {
+  color: var(--red);
+}
+
+/* The totals line sits in <thead> so it stays put while the body scrolls */
+table.data tr.total-row td {
+  background: var(--bg-alt);
+  font-weight: 600;
+  border-bottom: 2px solid var(--border);
+}
+.sort-caret {
+  color: var(--accent);
+}
+td.pos {
+  color: var(--green);
+}
+td.neg {
+  color: var(--red);
+}
+
+.popover.scroll {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.sub-filter {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.sub-filter span {
+  font-size: 11.5px;
+  color: var(--text-mute);
+}
+.sub-filter input {
+  height: 26px;
+  font-size: 12px;
+}
+
+.popular-report {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+}
+.popular-report > div:first-child {
+  flex: 1 1 300px;
+}
+.popular-report h3 {
+  margin: 0 0 6px;
+}
+.popular-report .field {
+  margin-bottom: 0;
+  min-width: 190px;
+}
+.report-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+.report-shortcut {
+  text-align: left;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--text);
+  display: block;
+}
+.report-shortcut:hover {
+  border-color: var(--accent);
+}
+.report-shortcut strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+}

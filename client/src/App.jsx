@@ -7,6 +7,7 @@ import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Campaigns from './pages/Campaigns.jsx';
+import Reports from './pages/Reports.jsx';
 import CampaignDetail from './pages/CampaignDetail.jsx';
 import Offers from './pages/Offers.jsx';
 import Landers from './pages/Landers.jsx';
@@ -47,6 +48,7 @@ export default function App() {
             >
               <Route path="/" element={<Dashboard />} />
               <Route path="/campaigns" element={<Campaigns />} />
+              <Route path="/reports" element={<Reports />} />
               <Route path="/campaigns/:id" element={<CampaignDetail />} />
               <Route path="/offers" element={<Offers />} />
               <Route path="/landers" element={<Landers />} />

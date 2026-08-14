@@ -78,6 +78,8 @@ export const getCampaignBySlug = (slug) => cache.campaignsBySlug.get(String(slug
 export const getCampaignById = (id) => cache.campaignsById.get(String(id));
 export const getOffer = (id) => cache.offers.get(String(id));
 export const getLander = (id) => cache.landers.get(String(id));
+/** Every cached offer, for lookups that run the other way (network -> its offers). */
+export const listOffers = () => [...cache.offers.values()];
 export const getSource = (id) => cache.sources.get(String(id));
 export const getNetworkByKey = (key) => cache.networksByKey.get(String(key));
 export const getNetworkById = (id) => cache.networksById.get(String(id));

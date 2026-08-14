@@ -1,6 +1,7 @@
 import express from 'express';
 import { asyncRoute } from '../middleware/error.js';
 import { runReport, runTimeseries, runSummary, parseFilters, DIMENSIONS } from '../services/report.service.js';
+import { getSettingsSync } from '../services/settings.service.js';
 import { str } from '../utils/validate.js';
 
 const router = express.Router();
@@ -14,6 +15,9 @@ router.get(
       to: req.query.to,
       includeBots: req.query.includeBots,
       limit: req.query.limit,
+      sortBy: str(req.query.sortBy, 24),
+      sortDir: req.query.sortDir === 'asc' ? 'asc' : 'desc',
+      tz: str(req.query.tz, 64),
       filters: parseFilters(req.query),
     });
     res.json(result);
@@ -23,7 +27,7 @@ router.get(
 router.get(
   '/report/dimensions',
   asyncRoute(async (req, res) => {
-    res.json({ dimensions: DIMENSIONS });
+    res.json({ dimensions: DIMENSIONS, reportTimezone: getSettingsSync().reportTimezone || 'Asia/Kolkata' });
   })
 );
 

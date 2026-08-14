@@ -31,6 +31,7 @@ export function incClick(click) {
     : {
         clicks: 1,
         uniques: click.isUnique ? 1 : 0,
+        lpViews: click.landerId ? 1 : 0,
         cost: Number(click.cost) || 0,
       };
 

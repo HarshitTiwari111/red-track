@@ -12,6 +12,10 @@ const statsHourlySchema = new mongoose.Schema(
     device: { type: String, default: 'unknown' },
     clicks: { type: Number, default: 0 },
     uniques: { type: Number, default: 0 },
+    // A click that was routed to a lander - i.e. the lander was displayed.
+    // Direct-linking clicks never count here, which is what makes LP CTR mean
+    // something: lpClicks / lpViews rather than lpClicks / clicks.
+    lpViews: { type: Number, default: 0 },
     lpClicks: { type: Number, default: 0 },
     conversions: { type: Number, default: 0 },
     revenue: { type: Number, default: 0 },

@@ -4,6 +4,7 @@ import { fmtMoney, fmtNum, fmtPct } from './StatCard.jsx';
 export const METRIC_COLUMNS = [
   { key: 'clicks', label: 'Clicks', num: true, render: (r) => fmtNum(r.clicks) },
   { key: 'uniques', label: 'Uniques', num: true, render: (r) => fmtNum(r.uniques) },
+  { key: 'lpViews', label: 'LP Views', num: true, render: (r) => fmtNum(r.lpViews) },
   { key: 'lpClicks', label: 'LP Clicks', num: true, render: (r) => fmtNum(r.lpClicks) },
   { key: 'lpCtr', label: 'LP CTR', num: true, render: (r) => fmtPct(r.lpCtr) },
   { key: 'conversions', label: 'Conv', num: true, render: (r) => fmtNum(r.conversions) },

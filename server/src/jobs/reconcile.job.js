@@ -42,6 +42,11 @@ export async function reconcileStats({ hours = 2 } = {}) {
         uniques: {
           $sum: { $cond: [{ $and: [{ $ne: ['$botFlag', true] }, '$isUnique'] }, 1, 0] },
         },
+        lpViews: {
+          $sum: {
+            $cond: [{ $and: [{ $ne: ['$botFlag', true] }, { $ifNull: ['$landerId', false] }] }, 1, 0],
+          },
+        },
         lpClicks: {
           $sum: { $cond: [{ $and: [{ $ne: ['$botFlag', true] }, '$lpClick'] }, 1, 0] },
         },
@@ -75,6 +80,7 @@ export async function reconcileStats({ hours = 2 } = {}) {
       clicks: r.clicks || 0,
       bots: r.bots || 0,
       uniques: r.uniques || 0,
+      lpViews: r.lpViews || 0,
       lpClicks: r.lpClicks || 0,
       cost: r.cost || 0,
       conversions: 0,
@@ -88,6 +94,7 @@ export async function reconcileStats({ hours = 2 } = {}) {
       clicks: 0,
       bots: 0,
       uniques: 0,
+      lpViews: 0,
       lpClicks: 0,
       cost: 0,
       conversions: 0,
@@ -129,6 +136,7 @@ export async function reconcileStats({ hours = 2 } = {}) {
           clicks: row.clicks,
           bots: row.bots,
           uniques: row.uniques,
+          lpViews: row.lpViews,
           lpClicks: row.lpClicks,
           cost: row.cost,
           conversions: row.conversions,
