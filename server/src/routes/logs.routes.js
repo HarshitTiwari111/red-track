@@ -9,6 +9,7 @@ import { clientIp } from '../services/geo.service.js';
 import { str, bool, toObjectId, isObjectId, badRequest, notFound } from '../utils/validate.js';
 import { parseRange } from '../utils/time.js';
 import { getSettingsSync } from '../services/settings.service.js';
+import { scopeByCampaign, ownedCampaignIds, ownsDoc, isAdmin } from '../middleware/scope.js';
 
 const router = express.Router();
 
@@ -38,7 +39,10 @@ router.get(
     }
 
     const limit = Math.min(Number(req.query.limit) || 500, 2000);
-    const items = await Click.find(q).sort({ ts: -1 }).limit(limit).lean();
+    const items = await Click.find(await scopeByCampaign(req, q))
+      .sort({ ts: -1 })
+      .limit(limit)
+      .lean();
     res.json({ items: items.map(decorate), count: items.length });
   })
 );
@@ -48,6 +52,10 @@ router.get(
   asyncRoute(async (req, res) => {
     const click = await Click.findOne({ clickid: str(req.params.clickid, 64) }).lean();
     if (!click) throw notFound();
+    if (!isAdmin(req)) {
+      const mine = await ownedCampaignIds(req);
+      if (!mine.some((id) => String(id) === String(click.campaignId))) throw notFound();
+    }
     const conversions = await Conversion.find({ clickid: click.clickid }).sort({ ts: -1 }).lean();
     res.json({ click: decorate(click), conversions });
   })
@@ -74,7 +82,10 @@ router.get(
     }
 
     const limit = Math.min(Number(req.query.limit) || 500, 2000);
-    const items = await Conversion.find(q).sort({ ts: -1 }).limit(limit).lean();
+    const items = await Conversion.find(await scopeByCampaign(req, q))
+      .sort({ ts: -1 })
+      .limit(limit)
+      .lean();
     res.json({ items: items.map(decorate), count: items.length });
   })
 );
@@ -102,7 +113,10 @@ router.get(
     q.ts = { $gte: range.utcFrom, $lte: range.utcTo };
 
     const limit = Math.min(Number(req.query.limit) || 1000, 5000);
-    const items = await Conversion.find(q).sort({ ts: -1 }).limit(limit).lean();
+    const items = await Conversion.find(await scopeByCampaign(req, q))
+      .sort({ ts: -1 })
+      .limit(limit)
+      .lean();
 
     // Traffic channel comes from the campaign's source
     const rows = items.map((c, i) => {
@@ -180,8 +194,12 @@ router.post(
     const status = str(req.body?.status, 24);
     if (!['approved', 'pending', 'rejected'].includes(status)) throw badRequest('Unknown status');
 
+    // A user may only touch conversions on campaigns they own
+    const scoped = await Conversion.find(await scopeByCampaign(req, { _id: { $in: ids } }), { _id: 1 }).lean();
+    const allowed = scoped.map((c) => String(c._id));
+
     let updated = 0;
-    for (const id of ids) {
+    for (const id of allowed) {
       // Sequential on purpose: each edit adjusts stats by its own delta
       // eslint-disable-next-line no-await-in-loop
       const r = await updateConversionStatus(id, { status });
@@ -195,6 +213,12 @@ router.patch(
   '/conversions/:id',
   asyncRoute(async (req, res) => {
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const target = await Conversion.findById(req.params.id).lean();
+    if (!target) throw notFound();
+    if (!isAdmin(req)) {
+      const mine = await ownedCampaignIds(req);
+      if (!mine.some((cid) => String(cid) === String(target.campaignId))) throw notFound();
+    }
     const updated = await updateConversionStatus(req.params.id, {
       status: req.body?.status,
       payout: req.body?.payout,
@@ -235,7 +259,7 @@ router.get(
     const ref = str(req.query.refId, 128);
     if (ref) q.refId = like(ref);
 
-    const items = await PostbackLog.find(q)
+    const items = await PostbackLog.find(await scopeByCampaign(req, q))
       .sort({ ts: -1 })
       .limit(Math.min(Number(req.query.limit) || 200, 1000))
       .lean();

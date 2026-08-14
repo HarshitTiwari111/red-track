@@ -1,6 +1,7 @@
 import express from 'express';
 import { asyncRoute } from '../middleware/error.js';
 import { runReport, runSummary, runTimeseries } from '../services/report.service.js';
+import { ownedCampaignIds } from '../middleware/scope.js';
 import { getSettingsSync } from '../services/settings.service.js';
 import { localDayKey } from '../utils/time.js';
 
@@ -66,17 +67,20 @@ router.get(
     const tz = getSettingsSync().reportTimezone || 'Asia/Kolkata';
     const p = periods(tz);
     const DIMS = ['campaign', 'offer', 'source'];
+    // A user's dashboard only counts their own campaigns
+    const ids = await ownedCampaignIds(req);
+    const scope = ids === null ? {} : { campaignIds: ids };
 
     const [summaries, tops, chart] = await Promise.all([
-      Promise.all(Object.values(p).map((range) => runSummary(range))),
+      Promise.all(Object.values(p).map((range) => runSummary({ ...range, ...scope }))),
       Promise.all(
         DIMS.flatMap((groupBy) =>
           ['today', 'yesterday'].map((day) =>
-            runReport({ groupBy, ...p[day], limit: 50 }).then((r) => ({ groupBy, day, rows: r.rows }))
+            runReport({ groupBy, ...p[day], limit: 50, filters: scope }).then((r) => ({ groupBy, day, rows: r.rows }))
           )
         )
       ),
-      runTimeseries({ ...p.today, granularity: 'hour' }),
+      runTimeseries({ ...p.today, ...scope, granularity: 'hour' }),
     ]);
 
     const names = Object.keys(p);

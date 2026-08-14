@@ -144,7 +144,7 @@ export default function Settings() {
   return (
     <Page title="Settings">
       {msg && <div className={`alert ${msg.type}`}>{msg.text}</div>}
-      {!isAdmin && <div className="alert info">You are signed in as a member — settings are read-only.</div>}
+      {!isAdmin && <div className="alert info">You are signed in as a user — settings are read-only.</div>}
 
       <div className="tabs">
         {['general', 'filters', 'users', 'diagnostics'].map((t) => (
@@ -256,7 +256,7 @@ export default function Settings() {
               type="button"
               className="btn primary sm"
               disabled={!isAdmin}
-              onClick={() => setNewUser({ name: '', email: '', password: '', role: 'member' })}
+              onClick={() => setNewUser({ name: '', email: '', password: '', role: 'user' })}
             >
               + New user
             </button>
@@ -357,7 +357,7 @@ export default function Settings() {
           <label className="field">
             <span>Role</span>
             <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}>
-              <option value="member">member</option>
+              <option value="user">user</option>
               <option value="admin">admin</option>
             </select>
           </label>

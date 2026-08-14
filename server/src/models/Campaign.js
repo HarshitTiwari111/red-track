@@ -60,6 +60,11 @@ const forwardSchema = new mongoose.Schema(
 
 const campaignSchema = new mongoose.Schema(
   {
+    /**
+     * Who this belongs to. Admins see every record; a user sees only their own,
+     * so scoping happens on this one field rather than per-route.
+     */
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true, trim: true, lowercase: true, index: true },
     trafficSourceId: { type: mongoose.Schema.Types.ObjectId, ref: 'TrafficSource', default: null },

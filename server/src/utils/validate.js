@@ -46,3 +46,4 @@ export class HttpError extends Error {
 
 export const badRequest = (msg) => new HttpError(400, msg);
 export const notFound = (msg = 'Not found') => new HttpError(404, msg);
+export const forbidden = (msg = 'This belongs to another user') => new HttpError(403, msg);

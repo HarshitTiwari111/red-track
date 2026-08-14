@@ -6,7 +6,8 @@ const userSchema = new mongoose.Schema(
     // Optional display name shown in the user menu; falls back to the email
     name: { type: String, default: '', trim: true },
     passwordHash: { type: String, required: true },
-    role: { type: String, enum: ['admin', 'member'], default: 'member' },
+    // Two roles only: an admin sees every user's data, a user sees just their own
+    role: { type: String, enum: ['admin', 'user'], default: 'user' },
     apiKey: { type: String, unique: true, sparse: true, index: true },
     active: { type: Boolean, default: true },
   },

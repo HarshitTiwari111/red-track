@@ -2,17 +2,20 @@ import config from './config/env.js';
 import logger from './utils/logger.js';
 import { connectDb } from './db/connect.js';
 import { ensureIndexes } from './db/indexes.js';
+import { runMigrations } from './db/migrate.js';
 import { getSettings } from './services/settings.service.js';
 import { initBotFilter } from './services/bot.service.js';
 import { refreshCache, startCacheRefresh } from './services/cache.service.js';
 import { startCapsRefresh } from './services/caps.service.js';
-import { startJobs } from './jobs/index.js';
+import { startJobs, isCronLeader } from './jobs/index.js';
 import { notifyError } from './services/telegram.service.js';
 import { createApp } from './app.js';
 
 async function main() {
   await connectDb();
   await ensureIndexes();
+  // Same rule as cron: one instance does the shared work, not every worker
+  if (isCronLeader()) await runMigrations();
 
   const settings = await getSettings({ force: true });
   initBotFilter(settings);

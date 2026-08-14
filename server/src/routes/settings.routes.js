@@ -142,8 +142,13 @@ router.post(
 );
 
 /* ------------------------------------------------------------------- users */
+/**
+ * Admin-only: toSafeJSON carries each user's API key, which is a credential.
+ * A user has no reason to see the roster at all, let alone that.
+ */
 router.get(
   '/users',
+  requireAdmin,
   asyncRoute(async (req, res) => {
     const users = await User.find({}).sort({ createdAt: 1 });
     res.json({ items: users.map((u) => u.toSafeJSON()) });
@@ -163,7 +168,7 @@ router.post(
       email,
       name: str(req.body?.name, 80),
       passwordHash: await bcrypt.hash(password, 10),
-      role: oneOf(str(req.body?.role, 16), ['admin', 'member'], 'member'),
+      role: oneOf(str(req.body?.role, 16), ['admin', 'user'], 'user'),
       apiKey: newApiKey(),
     });
     res.status(201).json(user.toSafeJSON());
@@ -183,7 +188,7 @@ router.patch(
       user.passwordHash = await bcrypt.hash(String(req.body.password), 10);
     }
     if (req.body?.name !== undefined) user.name = str(req.body.name, 80);
-    if (req.body?.role) user.role = oneOf(str(req.body.role, 16), ['admin', 'member'], user.role);
+    if (req.body?.role) user.role = oneOf(str(req.body.role, 16), ['admin', 'user'], user.role);
     if (req.body?.active !== undefined) user.active = bool(req.body.active, true);
     await user.save();
     res.json(user.toSafeJSON());

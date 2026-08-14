@@ -38,6 +38,11 @@ const paramSchema = new mongoose.Schema(
  */
 const trafficSourceSchema = new mongoose.Schema(
   {
+    /**
+     * Who this belongs to. Admins see every record; a user sees only their own,
+     * so scoping happens on this one field rather than per-route.
+     */
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     name: { type: String, required: true, trim: true },
     slug: { type: String, trim: true },
     aliasChannel: { type: String, default: '', trim: true },
