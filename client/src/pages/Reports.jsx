@@ -112,7 +112,7 @@ export default function Reports() {
 
   return (
     <Page title="Reports">
-      <div className="rt-tabs report-tabs">
+      <div className="tabs report-tabs">
         {TABS.map((t) => (
           <button key={t.id} type="button" className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
             {t.label}

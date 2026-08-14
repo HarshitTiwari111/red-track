@@ -2420,8 +2420,18 @@ table.data tfoot td.total-label {
 }
 
 /* ------------------------------------------------------------------ reports */
+/* Wider, quieter tabs than the in-modal ones - this row is the page's spine */
 .report-tabs {
+  gap: 0;
   margin-bottom: 16px;
+  border-bottom-color: var(--border);
+}
+.report-tabs button {
+  padding: 12px 22px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 .report-controls {
   display: flex;
