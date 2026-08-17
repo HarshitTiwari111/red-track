@@ -966,7 +966,13 @@ const normalizeCampaign = async (body, existing) => {
   body.slug = slug;
 
   if (body.trafficSourceId === '') body.trafficSourceId = null;
-  if (body.domainId === '' || body.domainId === undefined) body.domainId = body.domainId ?? null;
+  /*
+   * "No domain" means the default one, and the form says so with an empty
+   * option. An empty string is not an ObjectId, so it has to become null before
+   * Mongoose sees it - `?? null` did not, because it only catches null and
+   * undefined and leaves "" exactly as it was.
+   */
+  if (!body.domainId) body.domainId = null;
   if (body.domainId && !isObjectId(body.domainId)) throw badRequest('Invalid tracking domain');
   if (body.domainId && !(await Domain.exists({ _id: body.domainId }))) {
     throw badRequest('That tracking domain no longer exists');
