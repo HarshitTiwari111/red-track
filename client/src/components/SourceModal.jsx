@@ -580,7 +580,8 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
             <div className="rt-hint">
               Add an MCC account id to send conversions to it and not the ad account (optional).
               <br />
-              Make sure the credentials below can reach both the ad account and the MCC.
+              Make sure the Google account you sign in with can reach both the ad account and the
+              MCC.
             </div>
 
             <h4 className="sub-head">Conversion Matching</h4>
