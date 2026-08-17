@@ -88,6 +88,7 @@ export default function Layout() {
       <aside className="sidebar">
         <div className="sidebar-brand">
           <div className="brand-mark">K</div>
+          <div className="brand-text">KAP Tracker</div>
           <button
             type="button"
             className="nav-toggle"

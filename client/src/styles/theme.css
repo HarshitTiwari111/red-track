@@ -3133,6 +3133,13 @@ tr.pb-detail td {
 }
 
 /* ------------------------------------------------- collapsible sidebar */
+.brand-text {
+  font-weight: 650;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .nav-toggle {
   margin-left: auto;
   width: 30px;
@@ -3170,7 +3177,8 @@ tr.pb-detail td {
  * The mark goes, not the toggle: on a 62px rail there is room for one of
  * them, and the toggle is the only way back out of the collapsed state.
  */
-.app.nav-collapsed .brand-mark {
+.app.nav-collapsed .brand-mark,
+.app.nav-collapsed .brand-text {
   display: none;
 }
 .app.nav-collapsed .sidebar-brand {
