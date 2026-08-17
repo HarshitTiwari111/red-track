@@ -62,7 +62,23 @@ export function extractParams(query) {
  * routes its value into the matching utm slot so it shows up in reports and the
  * Rt columns instead of only living in a subID.
  */
-const UTM_ROLES = ['source', 'medium', 'campaign', 'adgroup', 'ad', 'placement', 'keyword'];
+const UTM_ROLES = [
+  'source',
+  'medium',
+  'campaign',
+  'adgroup',
+  'ad',
+  'placement',
+  'keyword',
+  'campaignId',
+  'adgroupId',
+  'adId',
+  'placementId',
+  'pubId',
+  'placementHashed',
+  'role1',
+  'role2',
+];
 
 export function applyParamRoles(click, query, source) {
   if (!source?.params?.length) return;

@@ -54,6 +54,18 @@ const clickSchema = new mongoose.Schema(
       ad: { type: String, default: '' },
       placement: { type: String, default: '' },
       keyword: { type: String, default: '' },
+      // The platform's own ids for the same three things. Kept alongside the
+      // names because the names change while the ids do not, and the ids are
+      // what the platform's API and its reports key on.
+      campaignId: { type: String, default: '' },
+      adgroupId: { type: String, default: '' },
+      adId: { type: String, default: '' },
+      placementId: { type: String, default: '' },
+      pubId: { type: String, default: '' },
+      placementHashed: { type: String, default: '' },
+      // Spare named slots for networks whose values fit none of the above
+      role1: { type: String, default: '' },
+      role2: { type: String, default: '' },
     },
     gclid: { type: String, default: '' },
     fbclid: { type: String, default: '' },

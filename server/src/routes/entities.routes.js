@@ -1,8 +1,15 @@
 import express from 'express';
 import crudRouter from './crudFactory.js';
 import { ownerFilter, ownerOnCreate, ownsDoc } from '../middleware/scope.js';
-import TrafficSource, { PARAM_ROLES } from '../models/TrafficSource.js';
+import TrafficSource, {
+  PARAM_ROLES,
+  COST_DEPTHS,
+  COST_FREQUENCIES,
+  sanitizeSource,
+} from '../models/TrafficSource.js';
 import { catalogSummary, getCatalogEntry } from '../services/sourceCatalog.service.js';
+import { verifyMetaAccount } from '../services/meta.service.js';
+import { verifyGoogleAccount } from '../services/google.service.js';
 import AffiliateNetwork, { POSTBACK_ROLES, DUPLICATE_MODES } from '../models/AffiliateNetwork.js';
 import { networkCatalogSummary, getNetworkTemplate } from '../services/networkCatalog.service.js';
 import Offer from '../models/Offer.js';
@@ -29,9 +36,101 @@ const router = express.Router();
  * `params` is the editable list. `tokens` and `paramTemplate` are derived from it
  * so the campaign tracking-link builder keeps working without knowing about roles.
  */
-const normalizeSource = async (body) => {
+const normalizeSource = async (body, existing = null) => {
   if (!str(body.name)) throw badRequest('Name is required');
   body.slug = body.slug ? slugify(body.slug) : slugify(body.name);
+
+  if (body.costUpdateDepth !== undefined) {
+    body.costUpdateDepth = COST_DEPTHS.includes(body.costUpdateDepth) ? body.costUpdateDepth : 'adset';
+  }
+  if (body.costUpdateFrequency !== undefined) {
+    const freq = Number(body.costUpdateFrequency);
+    body.costUpdateFrequency = COST_FREQUENCIES.includes(freq) ? freq : 5;
+  }
+
+  if (body.integration && typeof body.integration === 'object') {
+    const prev = existing?.integration || {};
+    const inc = body.integration;
+
+    // Secrets are never sent back to the client, so an edit round-trip arrives
+    // without them. Absent means "leave it alone"; only an explicit value
+    // replaces one, and an explicit empty string clears it.
+    const secret = (key) =>
+      typeof inc[key] === 'string' ? str(inc[key], 512) : prev[key] || '';
+    const secrets = {
+      accessToken: secret('accessToken'),
+      // Not a secret - an OAuth client id is public, so it round-trips normally
+      clientId: str(inc.clientId, 256),
+      clientSecret: secret('clientSecret'),
+      refreshToken: secret('refreshToken'),
+      developerToken: secret('developerToken'),
+    };
+
+    const adAccountId = str(inc.adAccountId, 64).replace(/^act_/, '');
+    const mccId = str(inc.mccId, 64);
+
+    // Any credential change invalidates whatever the last check concluded - the
+    // badge must never claim a connection that was verified with other values.
+    const changed =
+      adAccountId !== (prev.adAccountId || '') ||
+      mccId !== (prev.mccId || '') ||
+      Object.entries(secrets).some(([k, v]) => v !== (prev[k] || ''));
+
+    body.integration = {
+      provider: ['meta', 'google'].includes(inc.provider) ? inc.provider : '',
+      adAccountId,
+      mccId,
+      ...secrets,
+      impressionCostSync: !!inc.impressionCostSync,
+      status: changed ? 'not_connected' : prev.status || 'not_connected',
+      accountName: changed ? '' : prev.accountName || '',
+      lastCheckAt: changed ? null : prev.lastCheckAt || null,
+      lastError: changed ? '' : prev.lastError || '',
+    };
+  }
+
+  if (Array.isArray(body.conversionMatching)) {
+    body.conversionMatching = body.conversionMatching
+      .map((c) => ({
+        conversionType: str(c?.conversionType, 60),
+        conversionName: str(c?.conversionName, 120),
+        category: str(c?.category, 60),
+        includeInConversions: c?.includeInConversions !== false,
+      }))
+      // A row with no conversion action to fire at is an empty form row
+      .filter((c) => c.conversionType && c.conversionName);
+  }
+
+  if (Array.isArray(body.cm360)) {
+    body.cm360 = body.cm360
+      .map((c) => ({
+        conversionType: str(c?.conversionType, 60),
+        profileId: str(c?.profileId, 64),
+        floodlightActivityId: str(c?.floodlightActivityId, 64),
+      }))
+      .filter((c) => c.conversionType && c.profileId && c.floodlightActivityId);
+  }
+
+  if (Array.isArray(body.capiPixels)) {
+    const prev = existing?.capiPixels || [];
+    body.capiPixels = body.capiPixels
+      .map((p, i) => {
+        const pixelId = str(p?.pixelId, 64);
+        // Match on pixel id rather than index so reordering or deleting a row
+        // above cannot hand one pixel another pixel's token
+        const was = prev.find((x) => x.pixelId && x.pixelId === pixelId) || prev[i] || {};
+        return {
+          platform: 'meta',
+          label: str(p?.label, 80),
+          pixelId,
+          accessToken:
+            typeof p?.accessToken === 'string' ? str(p.accessToken, 512) : was.accessToken || '',
+          testEventCode: str(p?.testEventCode, 40),
+          enabled: p?.enabled !== false,
+        };
+      })
+      .filter((p) => p.pixelId);
+  }
 
   if (Array.isArray(body.params)) {
     const seen = new Set();
@@ -44,6 +143,12 @@ const normalizeSource = async (body) => {
       }))
       .filter((p) => {
         if (!p.param || seen.has(p.param)) return false;
+        // The form offers a fixed set of slots, so most arrive untouched -
+        // carrying only their generated sub name. Those are not parameters
+        // anyone asked for. A row with a name or a role is kept even without a
+        // macro: the platform may append that value itself, and the role still
+        // has to route it onto the click.
+        if (!p.macro && !p.name && !p.role) return false;
         seen.add(p.param);
         return true;
       });
@@ -84,9 +189,35 @@ router.post(
       ...entry.template,
     });
 
+    body.ownerId = ownerOnCreate(req, {});
     const created = await TrafficSource.create(body);
     await refreshCache();
-    res.status(201).json(created.toObject());
+    res.status(201).json(sanitizeSource(created.toObject()));
+  })
+);
+
+/**
+ * Check the stored Meta credentials against the Graph API and record the
+ * verdict, so the badge in the UI reflects a real answer rather than the fact
+ * that someone typed something into the field.
+ */
+router.post(
+  '/sources/:id/integration/verify',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const doc = await TrafficSource.findById(req.params.id);
+    if (!doc) throw notFound();
+    if (!ownsDoc(req, doc)) throw forbidden();
+
+    const verify = doc.integration?.provider === 'google' ? verifyGoogleAccount : verifyMetaAccount;
+    const result = await verify(doc.integration);
+    doc.integration.status = result.ok ? 'connected' : 'error';
+    doc.integration.accountName = result.ok ? result.accountName : '';
+    doc.integration.lastError = result.ok ? '' : result.error;
+    doc.integration.lastCheckAt = new Date();
+    await doc.save();
+
+    res.json({ ok: result.ok, integration: sanitizeSource(doc.toObject()).integration });
   })
 );
 
@@ -199,7 +330,7 @@ router.post(
   })
 );
 
-router.use('/sources', crudRouter(TrafficSource, { beforeSave: normalizeSource }));
+router.use('/sources', crudRouter(TrafficSource, { beforeSave: normalizeSource, sanitize: sanitizeSource }));
 
 /* ------------------------------------------------------ affiliate networks */
 const normalizeNetwork = async (body, existing) => {

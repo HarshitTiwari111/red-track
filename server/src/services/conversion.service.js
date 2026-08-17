@@ -5,6 +5,7 @@ import { PostbackLog } from '../models/Logs.js';
 import { getOffer, getNetworkById, getCampaignById, getSource } from './cache.service.js';
 import { incConversion } from './stats.service.js';
 import { fireForwards } from './forward.service.js';
+import { forwardConversionToMeta } from './meta.service.js';
 import { buildMacroContext } from './macro.service.js';
 import { getSettingsSync } from './settings.service.js';
 import { str, num, oneOf } from '../utils/validate.js';
@@ -282,6 +283,28 @@ export async function recordConversion({
       }),
       'postback-forward'
     );
+  }
+
+  /*
+   * Mirror the conversion to Meta's Conversions API. Deliberately not awaited:
+   * the conversion is already saved and the caller owes the network a fast 200,
+   * so a slow or unhappy Graph API must not hold the response open.
+   */
+  if (channel?.capiPixels?.length) {
+    forwardConversionToMeta(channel, {
+      // Meta collapses this with the browser pixel event of the same id, so a
+      // site running both the pixel and this postback is not counted twice.
+      eventId: String(created._id),
+      eventName: finalType,
+      time: created.ts,
+      value: finalPayout,
+      currency: channel.currency || 'USD',
+      url: str(url, 2048),
+      ip: click.ip || '',
+      userAgent: click.ua || '',
+      fbclid: click.fbclid || '',
+      clickTime: click.ts,
+    }).catch((e) => logger.warn('meta capi forward failed:', e.message));
   }
 
   log({ ok: true, reason: 'conversion recorded', clickid: cid, networkId });

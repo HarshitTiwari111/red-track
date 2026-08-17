@@ -7,6 +7,21 @@ import mongoose from 'mongoose';
  */
 export const PARAM_ROLES = [
   '',
+  /*
+   * The id halves. Ad platforms send an id and a human name for the same thing
+   * and both are worth keeping: the id is what their API and their reports key
+   * on, the name is what a person reads.
+   */
+  'campaignId',
+  'pubId',
+  'placementId',
+  'adId',
+  'adgroupId',
+  // Two spare slots with no fixed meaning, for whatever a network sends that
+  // none of the named roles fit.
+  'role1',
+  'role2',
+  // The name halves
   'source',
   'medium',
   'campaign',
@@ -14,9 +29,102 @@ export const PARAM_ROLES = [
   'ad',
   'placement',
   'keyword',
+  // Some networks send the placement only as a hash, to avoid naming the site
+  'placementHashed',
+  /*
+   * Not offered in the picker: the channel form has its own Click Ref ID and
+   * Click cost ID fields, which is where those two belong. Still accepted so
+   * channels created from templates that used them keep loading and saving
+   * unchanged.
+   */
   'cost',
   'clickref',
 ];
+
+/** Cost pulled from the ad platform can be attributed at one of three depths. */
+export const COST_DEPTHS = ['campaign', 'adset', 'ad'];
+
+/** How often the cost pull runs, in minutes. */
+export const COST_FREQUENCIES = [5, 15, 30, 60, 180, 360, 720, 1440];
+
+/**
+ * Credentials for the ad platform's own API. This is deliberately a long-lived
+ * access token rather than an OAuth round trip: a self-hosted tracker has no
+ * registered app to redirect through, and Meta hands out exactly this kind of
+ * token from Business Manager for the accounts you already own.
+ */
+const integrationSchema = new mongoose.Schema(
+  {
+    provider: { type: String, enum: ['', 'meta', 'google'], default: '' },
+    adAccountId: { type: String, default: '', trim: true },
+    // Google only: the manager account conversions are sent to instead of the
+    // ad account, when the advertiser runs under an MCC
+    mccId: { type: String, default: '', trim: true },
+    // Never leaves the server - stripped by sanitizeSource below
+    accessToken: { type: String, default: '', trim: true },
+    /*
+     * Google's API cannot be reached with a single pasted token the way Meta's
+     * can. It needs an OAuth client the operator registers themselves, a refresh
+     * token minted against it, and a developer token that Google approves per
+     * account. All four are required before a single call succeeds.
+     */
+    clientId: { type: String, default: '', trim: true },
+    clientSecret: { type: String, default: '', trim: true },
+    refreshToken: { type: String, default: '', trim: true },
+    developerToken: { type: String, default: '', trim: true },
+    status: { type: String, enum: ['not_connected', 'connected', 'error'], default: 'not_connected' },
+    accountName: { type: String, default: '', trim: true },
+    lastCheckAt: { type: Date, default: null },
+    lastError: { type: String, default: '' },
+    /**
+     * Spend on an ad set that got impressions but no clicks would otherwise
+     * have nothing to attach to, so the pull records one synthetic click and
+     * hangs the cost off that. It skews click counts, hence the opt-in.
+     */
+    impressionCostSync: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+/**
+ * Maps one of this tracker's conversion types onto a conversion action defined
+ * in the ad account, so an upload lands on the right goal rather than a generic
+ * one. `includeInConversions` mirrors the Google Ads setting of the same name -
+ * off means the action is still recorded but kept out of the bidding column.
+ */
+const conversionMatchSchema = new mongoose.Schema(
+  {
+    conversionType: { type: String, default: '', trim: true },
+    conversionName: { type: String, default: '', trim: true },
+    category: { type: String, default: '', trim: true },
+    includeInConversions: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
+/** Campaign Manager 360 destination for a conversion type. */
+const cm360Schema = new mongoose.Schema(
+  {
+    conversionType: { type: String, default: '', trim: true },
+    profileId: { type: String, default: '', trim: true },
+    floodlightActivityId: { type: String, default: '', trim: true },
+  },
+  { _id: false }
+);
+
+/** A Conversions API destination: conversions are mirrored back to the platform. */
+const capiPixelSchema = new mongoose.Schema(
+  {
+    platform: { type: String, enum: ['meta'], default: 'meta' },
+    label: { type: String, default: '', trim: true },
+    pixelId: { type: String, default: '', trim: true },
+    accessToken: { type: String, default: '', trim: true },
+    // Sends events to Meta's test console instead of counting them for real
+    testEventCode: { type: String, default: '', trim: true },
+    enabled: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
 
 const paramSchema = new mongoose.Schema(
   {
@@ -64,6 +172,16 @@ const trafficSourceSchema = new mongoose.Schema(
     // Which incoming query param carries the external click id (gclid/fbclid/ttclid)
     clickIdParam: { type: String, default: '' },
 
+    // Depth and cadence of the cost pull. They are stored even while no
+    // integration is connected, so connecting one later needs no re-setup.
+    costUpdateDepth: { type: String, enum: COST_DEPTHS, default: 'adset' },
+    costUpdateFrequency: { type: Number, enum: COST_FREQUENCIES, default: 5 },
+
+    integration: { type: integrationSchema, default: () => ({}) },
+    capiPixels: { type: [capiPixelSchema], default: [] },
+    conversionMatching: { type: [conversionMatchSchema], default: [] },
+    cm360: { type: [cm360Schema], default: [] },
+
     notes: { type: String, default: '' },
     status: { type: String, enum: ['active', 'paused'], default: 'active' },
   },
@@ -71,6 +189,38 @@ const trafficSourceSchema = new mongoose.Schema(
 );
 
 trafficSourceSchema.index({ name: 1 });
+
+/**
+ * Access tokens are write-only over the API: the client needs to know whether
+ * one is set - to draw "connected", and to leave the field alone when editing -
+ * but never needs the value. This is a plain function rather than a toJSON
+ * transform because most reads here are .lean(), which skips transforms.
+ */
+/** Integration fields the client may never read back. */
+const SECRETS = ['accessToken', 'clientSecret', 'refreshToken', 'developerToken'];
+
+export function sanitizeSource(doc) {
+  if (!doc || typeof doc !== 'object') return doc;
+  const out = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+  if (out.integration) {
+    const kept = { ...out.integration };
+    // One flag per secret: the form needs to know which are already stored so it
+    // can show a placeholder and leave them alone, without ever holding a value.
+    for (const key of SECRETS) {
+      kept[`has${key[0].toUpperCase()}${key.slice(1)}`] = !!kept[key];
+      delete kept[key];
+    }
+    kept.hasToken = kept.hasAccessToken;
+    out.integration = kept;
+  }
+  if (Array.isArray(out.capiPixels)) {
+    out.capiPixels = out.capiPixels.map((p) => {
+      const { accessToken, ...rest } = p;
+      return { ...rest, hasToken: !!accessToken };
+    });
+  }
+  return out;
+}
 
 export const TrafficSource = mongoose.model('TrafficSource', trafficSourceSchema);
 export default TrafficSource;

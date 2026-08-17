@@ -15,6 +15,9 @@ export function crudRouter(Model, options = {}) {
     afterWrite = async () => refreshCache(),
     defaultSort = { createdAt: -1 },
     listProject = null,
+    // Last step before a document goes out over the wire - the place to drop
+    // secrets that are allowed in but never allowed back out
+    sanitize = (doc) => doc,
   } = options;
 
   const router = express.Router();
@@ -32,7 +35,7 @@ export function crudRouter(Model, options = {}) {
       if (req.query.status) q.status = String(req.query.status);
       const limit = Math.min(Number(req.query.limit) || 500, 2000);
       const items = await Model.find(q, listProject).sort(defaultSort).limit(limit).lean();
-      res.json({ items, count: items.length });
+      res.json({ items: items.map(sanitize), count: items.length });
     })
   );
 
@@ -43,7 +46,7 @@ export function crudRouter(Model, options = {}) {
       const item = await Model.findById(req.params.id).lean();
       if (!item) throw notFound();
       if (!ownsDoc(req, item)) throw forbidden();
-      res.json(item);
+      res.json(sanitize(item));
     })
   );
 
@@ -54,7 +57,7 @@ export function crudRouter(Model, options = {}) {
       body.ownerId = ownerOnCreate(req, sanitizeObject(req.body));
       const created = await Model.create(body);
       await afterWrite();
-      res.status(201).json(created.toObject());
+      res.status(201).json(sanitize(created.toObject()));
     })
   );
 
@@ -70,7 +73,7 @@ export function crudRouter(Model, options = {}) {
       Object.assign(existing, body);
       await existing.save();
       await afterWrite();
-      res.json(existing.toObject());
+      res.json(sanitize(existing.toObject()));
     })
   );
 
@@ -85,7 +88,7 @@ export function crudRouter(Model, options = {}) {
       delete patch.ownerId;
       const updated = await Model.findByIdAndUpdate(req.params.id, { $set: patch }, { new: true }).lean();
       await afterWrite();
-      res.json(updated);
+      res.json(sanitize(updated));
     })
   );
 
