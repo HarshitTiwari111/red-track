@@ -3229,3 +3229,16 @@ tr.pb-detail td {
   padding-left: 0;
   padding-right: 0;
 }
+
+/* A borderless text action under a list, e.g. "Show more". */
+.link-plain {
+  border: 0;
+  background: transparent;
+  padding: 6px 0 12px;
+  color: var(--accent);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.link-plain:hover {
+  text-decoration: underline;
+}

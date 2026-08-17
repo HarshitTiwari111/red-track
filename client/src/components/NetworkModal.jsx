@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Modal from './Modal.jsx';
+import { LuCircleHelp } from 'react-icons/lu';
 import Field, { Switch } from './Field.jsx';
 import CopyField from './CopyField.jsx';
 
@@ -20,9 +21,9 @@ const ROLE_LABELS = {
 const ROLES = Object.keys(ROLE_LABELS);
 
 const DUPLICATE_MODES = [
-  { id: 'update', label: 'Update the existing conversion' },
-  { id: 'ignore', label: 'Ignore the repeat' },
-  { id: 'create', label: 'Create a new conversion' },
+  { id: 'create', label: 'Create new conversion' },
+  { id: 'update', label: 'Update existing conversion' },
+  { id: 'ignore', label: 'Ignore duplicate' },
 ];
 
 export const blankNetwork = () => ({
@@ -69,10 +70,46 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
   const origin = window.location.origin;
 
   const set = (patch) => onChange({ ...value, ...patch });
-  const setParam = (i, patch) =>
-    set({ params: value.params.map((p, x) => (x === i ? { ...p, ...patch } : p)) });
 
-  const roleParam = (role) => value.params.find((p) => p.role === role)?.param;
+  const roleParam = (role) => value.params.find((p) => p.role === role)?.param || '';
+
+  /**
+   * The click id and the amount get their own two fields, so editing one means
+   * renaming whichever parameter already carries that role - or adding it, for
+   * a source that never had one.
+   */
+  const setRoleParam = (role, param, name) => {
+    const at = value.params.findIndex((p) => p.role === role);
+    if (at === -1) {
+      set({ params: [...value.params, { param, macro: '', name, role }] });
+      return;
+    }
+    set({ params: value.params.map((p, x) => (x === at ? { ...p, param } : p)) });
+  };
+
+  /*
+   * Everything that is not the click id or the amount. They keep their index in
+   * the real list, so editing a row does not depend on how the list is sliced
+   * for display.
+   */
+  const extras = value.params
+    .map((p, index) => ({ p, index }))
+    .filter(({ p }) => p.role !== 'clickid' && p.role !== 'payout');
+
+  const EXTRA_SLOTS = 10;
+  const padded = [...extras];
+  while (padded.length < EXTRA_SLOTS) {
+    padded.push({ p: { param: '', macro: '', name: '', role: '' }, index: -padded.length - 1 });
+  }
+
+  /** A negative index means the slot is not in `params` yet. */
+  const setExtra = (index, patch) => {
+    if (index >= 0) {
+      set({ params: value.params.map((p, x) => (x === index ? { ...p, ...patch } : p)) });
+      return;
+    }
+    set({ params: [...value.params, { param: '', macro: '', name: '', role: '', ...patch }] });
+  };
 
   /* The URL the affiliate network is given, built from the configured roles. */
   const postbackUrl = () => {
@@ -91,7 +128,8 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
     return `${origin}/postback?${parts.join('&')}`;
   };
 
-  const visibleParams = showAllParams ? value.params : value.params.slice(0, 6);
+  // Two rows is what a source usually needs; the rest are there when asked for.
+  const visibleExtras = showAllParams ? padded : padded.slice(0, 2);
 
   return (
     <Modal
@@ -127,7 +165,7 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
             <Field label="Name" required>
               <input type="text" value={value.name} onChange={(e) => set({ name: e.target.value })} />
             </Field>
-            <Field label="Alias offer source" hint="Optional short name used in your own reporting.">
+            <Field label="Alias Offer source">
               <input
                 type="text"
                 value={value.aliasName}
@@ -138,32 +176,21 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
           </div>
 
           <CopyField label="Postback URL" value={postbackUrl()} />
-          <div className="rt-hint" style={{ marginTop: -8, marginBottom: 16 }}>
-            Build your postback URL here and paste it into your affiliate network&apos;s account.
+          <div className="rt-hint">
+            Build your postback URL here and copy it to your affiliate network&apos;s account
           </div>
 
-          <div className="field-row">
-            <Field
-              label="Currency"
-              hint="A label only — this tracker stores every amount as-is and does no conversion."
-            >
-              <select value={value.currency} onChange={(e) => set({ currency: e.target.value })}>
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Status">
-              <select value={value.status} onChange={(e) => set({ status: e.target.value })}>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-              </select>
-            </Field>
-          </div>
+          <Field label="Currency">
+            <select value={value.currency} onChange={(e) => set({ currency: e.target.value })}>
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-          <Field label="Offer URL template" hint="Pre-fills the URL when you create an offer under this source.">
+          <Field label="Offer URL template">
             <input
               type="text"
               className="mono"
@@ -176,56 +203,91 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
       </div>
 
       <div className="rt-card">
+        <div className="rt-card-head">Postback parameters</div>
+        <div className="rt-card-body">
+          {/* The two a postback cannot work without: which parameter carries the
+              click id, and which carries the amount. Everything optional lives
+              in the grid below. */}
+          <Field label="CLICKID">
+            <input
+              type="text"
+              className="mono"
+              value={roleParam('clickid')}
+              onChange={(e) => setRoleParam('clickid', e.target.value, 'Click ID')}
+              placeholder="clickid"
+            />
+          </Field>
+          <Field label="SUM">
+            <input
+              type="text"
+              className="mono"
+              value={roleParam('payout')}
+              onChange={(e) => setRoleParam('payout', e.target.value, 'Payout')}
+              placeholder="sum"
+            />
+          </Field>
+        </div>
+      </div>
+
+      <div className="rt-card">
         <div className="rt-card-head">
-          Postback parameters
-          <span className="mute" style={{ fontSize: 12, fontWeight: 400 }}>
-            {value.params.length} parameter{value.params.length === 1 ? '' : 's'}
+          <span className="head-title">
+            Additional parameters
+            <LuCircleHelp
+              className="head-help"
+              title="Anything else the network sends on the postback, kept alongside the conversion."
+            />
           </span>
         </div>
         <div className="rt-card-body tight">
-          <div className="rt-hint" style={{ marginBottom: 12 }}>
-            The <strong>parameter</strong> is what this tracker reads off the postback; the <strong>role</strong> says
-            which conversion field it fills. Leave the macro blank unless your network documents one.
+          <div className="cm-head cm4">
+            <span>
+              Parameter
+              <LuCircleHelp title="The query parameter on the postback URL." />
+            </span>
+            <span>
+              Macro / Token
+              <LuCircleHelp title="What the network puts in it, if it documents one." />
+            </span>
+            <span>
+              Name / Description
+              <LuCircleHelp title="Your own label for this value." />
+            </span>
+            <span>
+              Role
+              <LuCircleHelp title="Which conversion field the value fills, if any." />
+            </span>
           </div>
 
-          <div className="param-head">
-            <span>Parameter</span>
-            <span>Macro / token</span>
-            <span>Name / description</span>
-            <span>Role</span>
-            <span />
-          </div>
-
-          {visibleParams.map((p, i) => (
-            <div className="param-row" key={i}>
-              <Field>
+          {visibleExtras.map(({ p, index }, row) => (
+            <div className="param-row" key={index}>
+              <Field label={`Sub${row + 1}`}>
                 <input
                   type="text"
                   className="mono"
                   value={p.param}
-                  onChange={(e) => setParam(i, { param: e.target.value })}
-                  placeholder="clickid"
+                  onChange={(e) => setExtra(index, { param: e.target.value })}
+                  placeholder={`sub${row + 1}`}
                 />
               </Field>
-              <Field>
+              <Field label={`Sub${row + 1}`}>
                 <input
                   type="text"
                   className="mono"
                   value={p.macro}
-                  onChange={(e) => setParam(i, { macro: e.target.value })}
-                  placeholder="(from your network)"
+                  onChange={(e) => setExtra(index, { macro: e.target.value })}
                 />
               </Field>
-              <Field>
+              <Field label={`Sub${row + 1}`}>
                 <input
                   type="text"
                   value={p.name}
-                  onChange={(e) => setParam(i, { name: e.target.value })}
-                  placeholder="Click ID"
+                  onChange={(e) => setExtra(index, { name: e.target.value })}
+                  placeholder="hint"
                 />
               </Field>
-              <Field>
-                <select value={p.role} onChange={(e) => setParam(i, { role: e.target.value })}>
+              <Field label={`Sub${row + 1}`}>
+                <select value={p.role} onChange={(e) => setExtra(index, { role: e.target.value })}>
                   {ROLES.map((r) => (
                     <option key={r} value={r}>
                       {ROLE_LABELS[r]}
@@ -233,135 +295,139 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
                   ))}
                 </select>
               </Field>
-              <button
-                type="button"
-                className="icon-btn danger"
-                onClick={() => set({ params: value.params.filter((_, x) => x !== i) })}
-              >
-                ×
-              </button>
             </div>
           ))}
 
-          <div className="btn-group" style={{ marginTop: 6, marginBottom: 16 }}>
-            <button
-              type="button"
-              className="btn sm green"
-              onClick={() => set({ params: [...value.params, { param: '', macro: '', name: '', role: '' }] })}
-            >
-              + Add parameter
-            </button>
-            {value.params.length > 6 && (
-              <button type="button" className="btn sm" onClick={() => setShowAllParams((s) => !s)}>
-                {showAllParams ? 'Show less' : `Show more (${value.params.length - 6})`}
-              </button>
-            )}
-          </div>
+          <button type="button" className="link-plain" onClick={() => setShowAllParams((s) => !s)}>
+            {showAllParams ? 'Show less' : 'Show more'}
+          </button>
         </div>
       </div>
 
       <div className="rt-card">
-        <div className="rt-card-head">Conversion handling</div>
+        <div className="rt-card-head">Conversion status</div>
         <div className="rt-card-body">
-          <div className="field-row">
-            <Field
-              label="Default conversion status"
-              hint="Used when the postback carries no status. An offer's own default wins over this."
+          <Field label="Conversion status">
+            <select
+              value={value.defaultConversionStatus}
+              onChange={(e) => set({ defaultConversionStatus: e.target.value })}
             >
-              <select
-                value={value.defaultConversionStatus}
-                onChange={(e) => set({ defaultConversionStatus: e.target.value })}
-              >
-                <option value="approved">approved</option>
-                <option value="pending">pending</option>
-                <option value="rejected">rejected</option>
-              </select>
-            </Field>
-
-            <Field
-              label="Duplicate postback mode"
-              hint="What happens when the same transaction id arrives again."
-            >
-              <select value={value.duplicateMode} onChange={(e) => set({ duplicateMode: e.target.value })}>
-                {DUPLICATE_MODES.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
+              <option value="approved">Approved</option>
+              <option value="pending">Pending</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </Field>
+          <div className="rt-hint">
+            Use it to differentiate different conversions based on their statuses. Applied when the
+            postback carries no status of its own; an offer&apos;s own default wins over this.
           </div>
         </div>
       </div>
 
       <div className="rt-card">
-        <div className="rt-card-head">Click expiration</div>
+        <div className="rt-card-head">
+          <span className="head-title">
+            Click Expiration
+            <LuCircleHelp
+              className="head-help"
+              title="Refuse a conversion whose click is older than this window, and log why."
+            />
+          </span>
+        </div>
         <div className="rt-card-body">
           <Switch
             checked={value.clickExpiration.enabled}
             onChange={(v) => set({ clickExpiration: { ...value.clickExpiration, enabled: v } })}
-            label="Reject conversions that arrive after the attribution window"
+            label="Enable"
           />
-          {value.clickExpiration.enabled && (
-            <div style={{ marginTop: 14 }}>
-              <Field label="Days" hint="A conversion whose click is older than this is refused and logged.">
-                <input
-                  type="number"
-                  min="0"
-                  value={value.clickExpiration.days}
-                  onChange={(e) =>
-                    set({ clickExpiration: { ...value.clickExpiration, days: Number(e.target.value) } })
-                  }
-                />
-              </Field>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="rt-card">
-        <div className="rt-card-head">Postback protection</div>
-        <div className="rt-card-body">
-          <Switch
-            checked={value.postbackProtection.enabled}
-            onChange={(v) => set({ postbackProtection: { enabled: v } })}
-            label="Require the security key on every postback for this source"
-          />
-          <div className="rt-hint" style={{ marginTop: 10 }}>
-            Without this, a postback that carries no key is still accepted and attributed through the offer. Turn it on
-            once the network is sending the key.
+          <div style={{ marginTop: 14 }}>
+            <Field label="Days">
+              <input
+                type="number"
+                min="0"
+                disabled={!value.clickExpiration.enabled}
+                value={value.clickExpiration.days}
+                onChange={(e) =>
+                  set({ clickExpiration: { ...value.clickExpiration, days: Number(e.target.value) } })
+                }
+              />
+            </Field>
           </div>
         </div>
       </div>
 
       <div className="rt-card">
-        <div className="rt-card-head">Whitelisted IPs</div>
+        <div className="rt-card-head">
+          <span className="head-title">
+            Postback protection
+            <LuCircleHelp
+              className="head-help"
+              title="Require the security key on every postback for this source. Off, a postback carrying no key is still accepted."
+            />
+          </span>
+        </div>
+        <div className="rt-card-body">
+          <Switch
+            checked={value.postbackProtection.enabled}
+            onChange={(v) => set({ postbackProtection: { enabled: v } })}
+            label="Enable"
+          />
+        </div>
+      </div>
+
+      <div className="rt-card">
+        <div className="rt-card-head">Default duplicate postback mode</div>
+        <div className="rt-card-body">
+          <Field label="Mode">
+            <select value={value.duplicateMode} onChange={(e) => set({ duplicateMode: e.target.value })}>
+              {DUPLICATE_MODES.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </div>
+
+      <div className="rt-card">
+        <div className="rt-card-head">
+          <span className="head-title">
+            Whitelisted IPs
+            <LuCircleHelp
+              className="head-help"
+              title="If you want to receive conversions only from certain IPs, add those IPs here."
+            />
+          </span>
+        </div>
         <div className="rt-card-body">
           <Switch
             checked={value.whitelistedIps.enabled}
             onChange={(v) => set({ whitelistedIps: { ...value.whitelistedIps, enabled: v } })}
-            label="Only accept conversions from these IPs"
+            label="Enable"
           />
-          {value.whitelistedIps.enabled && (
-            <div style={{ marginTop: 14 }}>
-              <Field label="IPs (one per line)" hint="Leave empty to allow any IP — the toggle alone blocks nothing.">
-                <textarea
-                  className="mono"
-                  style={{ minHeight: 90 }}
-                  value={(value.whitelistedIps.ips || []).join('\n')}
-                  onChange={(e) =>
-                    set({
-                      whitelistedIps: {
-                        ...value.whitelistedIps,
-                        ips: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
-                      },
-                    })
-                  }
-                  placeholder={'203.0.113.10\n198.51.100.7'}
-                />
-              </Field>
-            </div>
-          )}
+          <div style={{ marginTop: 14 }}>
+            <Field label="IPs">
+              <textarea
+                className="mono"
+                style={{ minHeight: 90 }}
+                disabled={!value.whitelistedIps.enabled}
+                value={(value.whitelistedIps.ips || []).join('\n')}
+                onChange={(e) =>
+                  set({
+                    whitelistedIps: {
+                      ...value.whitelistedIps,
+                      ips: e.target.value
+                        .split('\n')
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    },
+                  })
+                }
+                placeholder={'203.0.113.10\n198.51.100.7'}
+              />
+            </Field>
+          </div>
         </div>
       </div>
 
