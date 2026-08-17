@@ -3142,3 +3142,55 @@ tr.pb-detail td {
   background: var(--amber);
   color: #1b1300;
 }
+
+/* ------------------------------------------------- collapsible sidebar */
+.nav-toggle {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--sidebar-muted);
+  font-size: 19px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.nav-toggle:hover {
+  color: var(--sidebar-strong);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/*
+ * Collapsed, the rail keeps only the icons. The width is a variable rather
+ * than a fixed number here so the sticky sidebar and the main column stay in
+ * step - both are sized from it.
+ */
+.app.nav-collapsed {
+  --sidebar-w: 62px;
+}
+.app.nav-collapsed .brand-mark,
+.app.nav-collapsed .brand-text,
+.app.nav-collapsed .nav-text,
+.app.nav-collapsed .nav-label {
+  display: none;
+}
+.app.nav-collapsed .sidebar-brand {
+  padding: 18px 0 14px;
+  justify-content: center;
+}
+.app.nav-collapsed .nav a {
+  justify-content: center;
+  gap: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+/* Without this the groups run together once their headings are hidden */
+.app.nav-collapsed .nav-group + .nav-group {
+  border-top: 1px solid var(--sidebar-border);
+  padding-top: 8px;
+  margin-top: 8px;
+}

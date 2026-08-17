@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import UserMenu from './UserMenu.jsx';
 import ViewAsPicker from './ViewAsPicker.jsx';
@@ -16,6 +17,7 @@ import {
   LuGlobe,
   LuRepeat,
   LuSettings,
+  LuMenu,
 } from 'react-icons/lu';
 
 const NAV = [
@@ -50,11 +52,45 @@ const NAV = [
   },
 ];
 
+const COLLAPSED = 'kap.sidebar.collapsed';
+
 export default function Layout() {
+  // Remembered, because a sidebar that springs back open on every page load is
+  // worse than one that never collapsed.
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(COLLAPSED) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggle = () => {
+    setCollapsed((was) => {
+      const next = !was;
+      try {
+        localStorage.setItem(COLLAPSED, next ? '1' : '0');
+      } catch {
+        /* a private window can refuse storage; the toggle still works */
+      }
+      return next;
+    });
+  };
+
   return (
-    <div className="app">
+    <div className={`app${collapsed ? ' nav-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-brand">
+          <button
+            type="button"
+            className="nav-toggle"
+            onClick={toggle}
+            aria-label={collapsed ? 'Expand the menu' : 'Collapse the menu'}
+            aria-expanded={!collapsed}
+            title={collapsed ? 'Expand the menu' : 'Collapse the menu'}
+          >
+            <LuMenu />
+          </button>
           <div className="brand-mark">K</div>
           <div className="brand-text">
             KAP Tracker
@@ -72,9 +108,11 @@ export default function Layout() {
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) => (isActive ? 'active' : '')}
+                  // Collapsed, the label is gone and the icon is all there is
+                  title={collapsed ? item.text : undefined}
                 >
                   <span className="nav-icon"><item.Icon /></span>
-                  {item.text}
+                  <span className="nav-text">{item.text}</span>
                 </NavLink>
               ))}
             </div>
