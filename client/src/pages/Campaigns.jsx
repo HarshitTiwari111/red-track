@@ -42,15 +42,29 @@ const DEFAULT_HIDDEN = ['uniques', 'cpa', 'funnels'];
 const DENSITIES = ['compact', 'standard', 'comfortable'];
 const money = (v) => `$ ${fmtMoney(v)}`;
 
-function cellValue(row, key) {
+function cellValue(row, key, { onEdit, trackingUrl }) {
   switch (key) {
     case 'index':
       return row.index;
     case 'name':
       return (
         <>
-          {row.name}
-          <span className="cell-sub">/c/{row.slug}</span>
+          {/* The title opens the campaign; the link under it goes where the
+              campaign actually sends traffic, so the two must not share a
+              click. */}
+          <button type="button" className="cell-link" onClick={() => onEdit(row)}>
+            {row.name}
+          </button>
+          <a
+            className="cell-sub cell-url"
+            href={trackingUrl(row)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title={trackingUrl(row)}
+          >
+            {trackingUrl(row)}
+          </a>
         </>
       );
     case 'status':
@@ -197,6 +211,26 @@ export default function Campaigns() {
     api.get('/funnels').then((r) => setTemplates(r.data.items || [])).catch(() => {});
     api.get('/domains').then((r) => setDomains(r.data.items || [])).catch(() => {});
   }, []);
+
+  const openEdit = useCallback((row) => {
+    setFormError('');
+    setEditing(campaignToForm(row));
+  }, []);
+
+  /**
+   * The link a campaign actually hands to a traffic source. Built from the
+   * campaign's own tracking domain, falling back to the default one and then to
+   * this host - the same order the campaign form previews it in.
+   */
+  const trackingUrl = useCallback(
+    (row) => {
+      const chosen =
+        domains.find((d) => String(d._id) === String(row.domainId)) || domains.find((d) => d.isDefault);
+      const base = chosen ? `${chosen.protocol}://${chosen.host}` : window.location.origin;
+      return `${base}/c/${row.slug}`;
+    },
+    [domains]
+  );
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -609,17 +643,14 @@ export default function Campaigns() {
                     <tr
                       key={id}
                       className={selected.has(id) ? 'row-selected' : ''}
-                      onDoubleClick={() => {
-                        setFormError('');
-                        setEditing(campaignToForm(r));
-                      }}
+                      onDoubleClick={() => openEdit(r)}
                     >
                       <td className="check">
                         <input type="checkbox" checked={selected.has(id)} onChange={() => toggleRow(id)} />
                       </td>
                       {columns.map((c) => (
                         <td key={c.key} className={c.num ? 'num' : ''}>
-                          {cellValue(r, c.key)}
+                          {cellValue(r, c.key, { onEdit: openEdit, trackingUrl })}
                         </td>
                       ))}
                     </tr>
@@ -677,7 +708,7 @@ export default function Campaigns() {
       </div>
 
       <div className="hint" style={{ marginTop: 10 }}>
-        Double-click a row to edit it, or use Report to open the campaign&apos;s drilldowns and tracking links.
+        Click a campaign name to edit it, or use Report to open the campaign&apos;s drilldowns and tracking links.
       </div>
 
       {editing && (

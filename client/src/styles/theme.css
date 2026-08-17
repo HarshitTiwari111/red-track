@@ -3242,3 +3242,26 @@ tr.pb-detail td {
 .link-plain:hover {
   text-decoration: underline;
 }
+
+/* A table cell's title acting as the way into the record it names. */
+.cell-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cell-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+/* The tracking link under it leaves the app, so it is coloured as a link. */
+.cell-url {
+  color: var(--text-mute);
+}
+.cell-url:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
