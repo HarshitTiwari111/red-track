@@ -36,7 +36,7 @@ export const config = {
   googleAds: {
     proxyUrl: process.env.GOOGLE_ADS_PROXY || 'https://secure.dataram.workers.dev/api',
     apiVersion: process.env.GOOGLE_ADS_API_VERSION || 'v24',
-    authUrl: process.env.GOOGLE_ADS_AUTH_URL || '',
+    authUrl: process.env.GOOGLE_ADS_AUTH_URL || 'https://secure.dataram.workers.dev/auth/login',
   },
   /**
    * How many reverse proxies sit in front of the app.

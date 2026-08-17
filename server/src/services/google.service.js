@@ -46,18 +46,23 @@ const apiBase = () => `${config.googleAds.proxyUrl.replace(/\/+$/, '')}/${config
 /** Whether this install can start a Google sign-in at all. */
 export const googleConfigured = () => !!config.googleAds.authUrl;
 
-/** Where the proxy sends the operator back once Google has been dealt with. */
-export const redirectUri = () => `${config.baseUrl}/api/v1/oauth/google/callback`;
+/**
+ * Where the proxy drops the browser afterwards, with the refresh token appended
+ * to the address. It has to be an origin the proxy allows; anything else comes
+ * back "Invalid Return URL. Only dashboard origin is allowed."
+ */
+export const returnUrl = () => `${config.baseUrl}/sources`;
 
 /**
- * Hand the browser to the proxy's sign-in, telling it where to come back to.
- * The proxy owns the consent screen because it owns the OAuth client; this app
- * only needs the refresh token that comes out the other side.
+ * Hand the browser to the proxy's sign-in.
+ *
+ * The proxy owns the consent screen because it owns the OAuth client, and it
+ * takes one parameter: where to return to. It carries nothing else through, so
+ * which channel is being connected is remembered on this side rather than sent.
  */
-export function buildAuthUrl(state) {
+export function buildAuthUrl() {
   const url = new URL(config.googleAds.authUrl);
-  url.searchParams.set('redirect_uri', redirectUri());
-  url.searchParams.set('state', state);
+  url.searchParams.set('return_url', returnUrl());
   return url.toString();
 }
 

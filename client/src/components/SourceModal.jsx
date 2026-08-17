@@ -94,6 +94,19 @@ const GOOGLE_CATEGORIES = [
   'DEFAULT',
 ];
 
+/**
+ * Which channel a Google sign-in was started for. The proxy returns the browser
+ * with the token appended and nothing else, so the channel has to survive the
+ * round trip on this side.
+ */
+export const PENDING_GOOGLE_CHANNEL = 'kap.google.pendingChannel';
+
+/**
+ * The proxy has used several names for the same value, and drops it in the
+ * query string or the fragment depending on the path taken.
+ */
+export const GOOGLE_TOKEN_KEYS = ['google_refresh_token', 'refresh_token', 'refreshToken', 'token'];
+
 const blankParam = (n) => ({ param: `sub${n}`, macro: '', name: '', role: '' });
 
 /** Draw exactly PARAM_SLOTS rows, continuing the sub numbering past the filled ones. */
@@ -256,9 +269,11 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
   };
 
   /**
-   * Hand the operator to Google's consent screen. The form is saved on the way
-   * out because this leaves the page entirely - Google decides when we come
-   * back, and anything unsaved would be gone by then.
+   * Hand the operator to Google's consent screen.
+   *
+   * The form is saved on the way out because this leaves the page entirely.
+   * The proxy carries nothing back but the token, so which channel was being
+   * connected is left here for the Traffic Channels page to pick up on return.
    */
   const signInWithGoogle = async () => {
     setVerifying(true);
@@ -266,6 +281,7 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
     try {
       await api.put(`/sources/${value._id}`, value);
       const { data } = await api.post(`/sources/${value._id}/integration/google/start`);
+      localStorage.setItem(PENDING_GOOGLE_CHANNEL, value._id);
       window.location.href = data.url;
     } catch (e) {
       setVerifyMsg({ ok: false, text: e.response?.data?.error || e.message });

@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page } from '../components/Layout.jsx';
 import Field from '../components/Field.jsx';
-import SourceModal, { blankSource, sourceToForm } from '../components/SourceModal.jsx';
+import SourceModal, {
+  blankSource,
+  sourceToForm,
+  GOOGLE_TOKEN_KEYS,
+  PENDING_GOOGLE_CHANNEL,
+} from '../components/SourceModal.jsx';
 import SourceCatalogModal from '../components/SourceCatalogModal.jsx';
 import { fmtMoney, fmtNum, fmtPct } from '../components/StatCard.jsx';
 import { api, errMsg } from '../api/client.js';
@@ -166,23 +171,48 @@ export default function Sources() {
   }, [load]);
 
   /**
-   * Google's consent screen sends the operator back here with the outcome on
-   * the URL, because the round trip leaves the app entirely and there is no
-   * open modal left to report into. The query is cleared once read, so a
-   * refresh does not replay a stale result.
+   * Catch the refresh token the OAuth proxy appends to this page's address on
+   * the way back from Google.
+   *
+   * It travels in the URL because the proxy returns the browser here rather
+   * than calling the API, so it is stripped from the address bar before
+   * anything else - a refresh token has no business sitting in history. The
+   * channel it belongs to was left behind when the sign-in started, since the
+   * proxy carries nothing through but the token itself.
    */
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search);
-    const result = q.get('google');
-    if (!result) return;
-    const message = q.get('message') || '';
-    if (result === 'ok') {
-      setNotice(message || 'Google account connected.');
-      setTimeout(() => setNotice(''), 6000);
-    } else {
-      setError(message || 'Google sign-in failed.');
+    const { search, hash } = window.location;
+    const params = new URLSearchParams(search.replace(/^\?/, ''));
+    if (hash.includes('?')) {
+      for (const [k, v] of new URLSearchParams(hash.slice(hash.indexOf('?') + 1))) params.set(k, v);
     }
+
+    const key = GOOGLE_TOKEN_KEYS.find((k) => params.get(k));
+    const oauthError = params.get('error') || params.get('oauth_error');
+    if (!key && !oauthError) return;
+
+    const token = key ? params.get(key) : '';
+    const channelId = localStorage.getItem(PENDING_GOOGLE_CHANNEL);
+    localStorage.removeItem(PENDING_GOOGLE_CHANNEL);
     window.history.replaceState({}, '', window.location.pathname);
+
+    if (oauthError) return setError(oauthError);
+    if (!channelId) return setError('Signed in, but the channel this was for is no longer known.');
+
+    api
+      .post(`/sources/${channelId}/integration/google/token`, { refresh_token: token })
+      .then(({ data }) => {
+        if (data.ok) {
+          setNotice(`Google connected — ${data.integration.accountName}`);
+          setTimeout(() => setNotice(''), 6000);
+        } else {
+          setError(data.integration.lastError || 'Google rejected the connection.');
+        }
+        load();
+      })
+      .catch((err) => setError(errMsg(err, 'Could not save the Google connection')));
+    // load is stable for the initial filters, and this must run exactly once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

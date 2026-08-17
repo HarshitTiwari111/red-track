@@ -9,11 +9,10 @@ import TrafficSource, {
 } from '../models/TrafficSource.js';
 import { catalogSummary, getCatalogEntry } from '../services/sourceCatalog.service.js';
 import { verifyMetaAccount } from '../services/meta.service.js';
-import jwt from 'jsonwebtoken';
 import {
   buildAuthUrl,
   googleConfigured,
-  redirectUri,
+  returnUrl,
   verifyGoogleAccount,
 } from '../services/google.service.js';
 import AffiliateNetwork, { POSTBACK_ROLES, DUPLICATE_MODES } from '../models/AffiliateNetwork.js';
@@ -214,66 +213,46 @@ router.post(
 );
 
 /**
- * Begin Google's consent flow for one channel.
+ * Start Google's consent flow and report where to send the browser.
  *
- * The state is a signed, short-lived token rather than the raw channel id: the
- * callback arrives as a plain browser redirect, so anything unsigned there
- * could be forged to attach an attacker's Google grant to someone's channel.
+ * The proxy carries nothing through the round trip but the return address, so
+ * which channel is being connected cannot ride along - the caller remembers it
+ * and hands the token back to the route below.
  */
 router.post(
   '/sources/:id/integration/google/start',
   asyncRoute(async (req, res) => {
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
     if (!googleConfigured()) {
-      throw badRequest(
-        'Google sign-in is not set up. The Google Ads proxy needs a sign-in endpoint that returns a refresh token, and its address must be set as GOOGLE_ADS_AUTH_URL.'
-      );
+      throw badRequest('Google sign-in is not set up. Set GOOGLE_ADS_AUTH_URL to the proxy sign-in endpoint.');
     }
     const doc = await TrafficSource.findById(req.params.id).lean();
     if (!doc) throw notFound();
     if (!ownsDoc(req, doc)) throw forbidden();
 
-    const state = jwt.sign({ sid: String(doc._id), uid: String(req.user.uid) }, config.jwtSecret, {
-      expiresIn: '10m',
-    });
-    res.json({ url: buildAuthUrl(state), redirectUri: redirectUri() });
+    res.json({ url: buildAuthUrl(), returnUrl: returnUrl() });
   })
 );
 
 /**
- * Where the proxy sends the operator back, carrying the refresh token Google
- * issued. Reached by a browser redirect rather than the app's own fetch, so it
- * answers with a redirect rather than JSON, and the signed state - not anything
- * the URL claims about which channel this is - is what identifies the channel.
+ * Store the refresh token the proxy handed back, and only then decide whether
+ * the channel is connected: a grant proves an account signed in, not that it
+ * can see this particular ad account.
  */
-router.get(
-  '/oauth/google/callback',
+router.post(
+  '/sources/:id/integration/google/token',
   asyncRoute(async (req, res) => {
-    const done = (ok, message) =>
-      res.redirect(`/sources?google=${ok ? 'ok' : 'error'}&message=${encodeURIComponent(message)}`);
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const refreshToken = str(req.body?.refresh_token || req.body?.token, 512);
+    if (!refreshToken) throw badRequest('No refresh token was returned by the sign-in');
 
-    if (req.query.error) return done(false, String(req.query.error).slice(0, 200));
-
-    let claims;
-    try {
-      claims = jwt.verify(String(req.query.state || ''), config.jwtSecret);
-    } catch {
-      return done(false, 'That sign-in link expired. Open the channel and try again.');
-    }
-
-    const doc = await TrafficSource.findById(claims.sid);
-    if (!doc) return done(false, 'That traffic channel no longer exists.');
-
-    const refreshToken = str(req.query.refresh_token || req.query.token, 512);
-    if (!refreshToken) {
-      return done(false, 'The sign-in returned no refresh token. Check the proxy sends one back.');
-    }
+    const doc = await TrafficSource.findById(req.params.id);
+    if (!doc) throw notFound();
+    if (!ownsDoc(req, doc)) throw forbidden();
 
     doc.integration.provider = 'google';
     doc.integration.refreshToken = refreshToken;
-    doc.integration.grantedEmail = str(req.query.email, 200);
-    // Signing in proves nothing about the ad account itself, so the connection
-    // is only called good once the account has actually been read back.
+
     const check = await verifyGoogleAccount(doc.integration);
     doc.integration.status = check.ok ? 'connected' : 'error';
     doc.integration.accountName = check.ok ? check.accountName : '';
@@ -282,7 +261,7 @@ router.get(
     await doc.save();
     await refreshCache();
 
-    return done(check.ok, check.ok ? `Connected to ${check.accountName}` : check.error);
+    res.json({ ok: check.ok, integration: sanitizeSource(doc.toObject()).integration });
   })
 );
 
