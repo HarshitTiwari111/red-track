@@ -1667,6 +1667,23 @@ textarea.pem {
 .rt-field .rt-hint {
   margin-top: 5px;
 }
+/*
+ * A note explaining the control above it, rather than one belonging to a field.
+ * It tucks under that control by cancelling most of the field's bottom margin,
+ * and leaves room beneath: the next field's label is pulled 7px above its own
+ * box, so a hint with no bottom margin gets written over by it.
+ */
+.rt-card-body > .rt-hint {
+  margin: -13px 0 20px;
+}
+/* Controls that carry no field margin of their own need no pulling up. */
+.rt-card-body > .inline-field + .rt-hint {
+  margin-top: 0;
+}
+/* Consecutive paragraphs read as one note, so they sit closer together. */
+.rt-card-body > .rt-hint + .rt-hint {
+  margin-top: -14px;
+}
 .rt-box {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

@@ -224,20 +224,27 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
   };
 
   /**
-   * Asks the server to call Meta with the stored credentials. It can only run
-   * against a saved channel, because the token lives on the server and is never
-   * held in the browser.
+   * Save, then ask the server to call the platform.
+   *
+   * The check has to run server-side, because the credentials live there and
+   * are never handed back to the browser - so whatever was just typed has to
+   * reach the server first. Saving here rather than asking the user to save is
+   * not a shortcut: the modal's own Save closes it, so a button that only read
+   * stored values could never see the credentials being entered.
    */
   const verify = async () => {
     setVerifying(true);
     setVerifyMsg(null);
     try {
+      const { data: saved } = await api.put(`/sources/${value._id}`, value);
       const { data } = await api.post(`/sources/${value._id}/integration/verify`);
-      set({ integration: { ...integration, ...data.integration, accessToken: '' } });
+      // The saved copy carries no secrets, so this also clears the typed ones
+      // from the form - they are stored now and show as a placeholder instead.
+      onChange({ ...sourceToForm(saved), integration: { ...saved.integration, ...data.integration } });
       setVerifyMsg(
         data.ok
           ? { ok: true, text: `Connected to ${data.integration.accountName || 'the ad account'}.` }
-          : { ok: false, text: data.integration.lastError || 'Meta rejected the credentials.' }
+          : { ok: false, text: data.integration.lastError || 'The platform rejected the credentials.' }
       );
     } catch (e) {
       setVerifyMsg({ ok: false, text: e.response?.data?.error || e.message });
@@ -245,6 +252,12 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
       setVerifying(false);
     }
   };
+
+  const verifyAlert = verifyMsg ? (
+    <div className={`alert ${verifyMsg.ok ? 'success' : 'error'}`}>{verifyMsg.text}</div>
+  ) : integration.status === 'error' && integration.lastError ? (
+    <div className="alert error">{integration.lastError}</div>
+  ) : null;
 
   const previewQuery = value.params
     .filter((p) => p.param && p.macro)
@@ -480,6 +493,10 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
               Costs are pulled and conversions are sent for the connected ad account.
             </div>
 
+            {/* Sits under the button that produced it, not at the foot of the
+                panel where a scrolled-down reader would never see it. */}
+            {verifyAlert}
+
             <Field label="Google MCC Account ID (optional)">
               <input
                 type="text"
@@ -541,17 +558,6 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
                 />
               </Field>
             </div>
-
-            {verifyMsg && (
-              <div className={`alert ${verifyMsg.ok ? 'success' : 'error'}`} style={{ marginTop: 4 }}>
-                {verifyMsg.text}
-              </div>
-            )}
-            {!verifyMsg && integration.status === 'error' && integration.lastError && (
-              <div className="alert error" style={{ marginTop: 4 }}>
-                {integration.lastError}
-              </div>
-            )}
 
             <h4 className="sub-head">Conversion Matching</h4>
             <div className="cm-head cm4">
@@ -748,16 +754,7 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
                 Connect Meta
               </button>
 
-              {verifyMsg && (
-                <div className={`alert ${verifyMsg.ok ? 'success' : 'error'}`} style={{ marginTop: 12 }}>
-                  {verifyMsg.text}
-                </div>
-              )}
-              {!verifyMsg && integration.status === 'error' && integration.lastError && (
-                <div className="alert error" style={{ marginTop: 12 }}>
-                  {integration.lastError}
-                </div>
-              )}
+              {verifyAlert}
 
               <label className="switch" style={{ marginTop: 18 }}>
                 <input
