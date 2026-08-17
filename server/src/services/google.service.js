@@ -99,12 +99,52 @@ export async function searchAds(integration, query, { stream = false } = {}) {
  * the check that matters: a grant can be valid in general and still carry no
  * permission on this particular customer.
  */
+/** 1234567890 -> 123-456-7890, the form every Google Ads screen shows. */
+const dashed = (id) => String(id).replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3');
+
+/** Which customers the signed-in account can reach at all. */
+export async function listAccessibleCustomers(refreshToken) {
+  const res = await call(`${apiBase()}/customers:listAccessibleCustomers`, {
+    headers: { 'x-user-refresh-token': refreshToken },
+  });
+  if (!res.ok) return res;
+  return {
+    ok: true,
+    ids: (res.body?.resourceNames || []).map((n) => String(n).split('/').pop()),
+  };
+}
+
+/**
+ * "The caller does not have permission" says nothing about which account is
+ * wrong, and there are three ordinary reasons for it: the wrong customer id,
+ * a client account queried without naming its manager, or a Google account
+ * that was simply never given access. Asking Google what this grant *can*
+ * reach turns all three into something a person can act on.
+ */
+async function explainPermission(integration, error) {
+  if (!/permission|PERMISSION_DENIED|not have access/i.test(error)) return error;
+
+  const reachable = await listAccessibleCustomers(integration.refreshToken);
+  if (!reachable.ok || !reachable.ids?.length) {
+    return `${error} — the signed-in Google account can reach no Google Ads accounts at all. Sign in with the account that has access to ${dashed(digits(integration.adAccountId))}.`;
+  }
+
+  const list = reachable.ids.map(dashed).join(', ');
+  const asked = dashed(digits(integration.adAccountId));
+  if (reachable.ids.includes(digits(integration.adAccountId))) {
+    // It is reachable, so the id is right and something else is refusing:
+    // almost always a client account queried without its manager named.
+    return `${error} — ${asked} is visible to this account, so it is most likely a client account under a manager. Put the manager's id in the MCC field.`;
+  }
+  return `${error} — this Google account can reach ${list}, but not ${asked}. Use one of those, or put its manager's id in the MCC field.`;
+}
+
 export async function verifyGoogleAccount(integration) {
   const res = await searchAds(
     integration,
     'SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1'
   );
-  if (!res.ok) return { ok: false, error: res.error };
+  if (!res.ok) return { ok: false, error: await explainPermission(integration, res.error) };
 
   const row = res.body?.results?.[0]?.customer;
   return {
