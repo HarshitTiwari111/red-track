@@ -64,9 +64,13 @@ const normalizeSource = async (body, existing = null) => {
     const secrets = {
       accessToken:
         typeof inc.accessToken === 'string' ? str(inc.accessToken, 512) : prev.accessToken || '',
-      // Written only by the OAuth callback. Saving the form must never be able
-      // to set or clear a grant Google made.
-      refreshToken: prev.refreshToken || '',
+      /*
+       * Normally written by the sign-in callback. A typed value is accepted
+       * too, because an install whose proxy has no sign-in endpoint has no
+       * other way to supply one - but only a non-empty value replaces it, so
+       * an ordinary save can never wipe a grant that is already there.
+       */
+      refreshToken: str(inc.refreshToken, 512) || prev.refreshToken || '',
       grantedEmail: prev.grantedEmail || '',
     };
 
@@ -173,6 +177,15 @@ const normalizeSource = async (body, existing = null) => {
 
   return body;
 };
+
+/**
+ * What the install itself can do, as opposed to any one channel. The modal
+ * needs this to know whether to offer a sign-in button or ask for the token
+ * directly.
+ */
+router.get('/integrations/config', (req, res) => {
+  res.json({ googleSignIn: googleConfigured() });
+});
 
 /* Catalog of prebuilt channels for "New from template" */
 router.get('/sources/catalog', (req, res) => {

@@ -108,6 +108,8 @@ const blankIntegration = () => ({
   adAccountId: '',
   mccId: '',
   accessToken: '',
+  refreshToken: '',
+  hasRefreshToken: false,
   status: 'not_connected',
   accountName: '',
   grantedEmail: '',
@@ -163,6 +165,9 @@ const STATUS_BADGE = {
 
 export default function SourceModal({ value, onChange, onClose, onSave, saving, error }) {
   const [macros, setMacros] = useState([]);
+  // Whether the proxy can run a Google sign-in. Until it can, the refresh
+  // token has to be supplied by hand, so the panel offers a field instead.
+  const [googleSignIn, setGoogleSignIn] = useState(true);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState(null);
   const [editingPixel, setEditingPixel] = useState(null);
@@ -173,6 +178,10 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
       .get('/macros')
       .then((r) => setMacros(r.data.macros || []))
       .catch(() => setMacros([]));
+    api
+      .get('/integrations/config')
+      .then((r) => setGoogleSignIn(!!r.data.googleSignIn))
+      .catch(() => setGoogleSignIn(false));
   }, []);
 
   const set = (patch) => onChange({ ...value, ...patch });
@@ -547,16 +556,18 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
               <button
                 type="button"
                 className="brand-btn"
-                onClick={integration.status === 'connected' ? verify : signInWithGoogle}
+                onClick={googleSignIn && integration.status !== 'connected' ? signInWithGoogle : verify}
                 disabled={!value._id || verifying}
                 title={
-                  integration.status === 'connected'
-                    ? 'Re-check this account against Google'
-                    : 'Grant this tracker access to the ad account'
+                  googleSignIn && integration.status !== 'connected'
+                    ? 'Grant this tracker access to the ad account'
+                    : 'Check this account against Google'
                 }
               >
                 {verifying ? <span className="spinner" /> : <SiGoogle className="brand-mark-google" />}
-                {integration.status === 'connected' ? 'Re-check connection' : 'Sign in with Google'}
+                {googleSignIn && integration.status !== 'connected'
+                  ? 'Sign in with Google'
+                  : 'Connect'}
               </button>
             </div>
             <div className="rt-hint">
@@ -564,6 +575,28 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
                 ? `Access granted by ${integration.grantedEmail}. Costs are pulled and conversions are sent for this ad account.`
                 : 'Costs are pulled and conversions are sent for the connected ad account.'}
             </div>
+
+            {/*
+              The proxy holds the OAuth client, so normally it runs the sign-in
+              and hands back a refresh token. Where it has no such endpoint the
+              token is the one thing this app cannot obtain for itself, so it is
+              asked for directly rather than leaving the panel unusable.
+            */}
+            {!googleSignIn && (
+              <Field
+                label="Google refresh token"
+                hint="Sent to the proxy as x-user-refresh-token. Stored on the server and never shown again."
+              >
+                <input
+                  type="password"
+                  className="mono"
+                  autoComplete="new-password"
+                  value={integration.refreshToken || ''}
+                  onChange={(e) => setIntegration({ refreshToken: e.target.value })}
+                  placeholder={integration.hasRefreshToken ? '••••••••••••' : '1//…'}
+                />
+              </Field>
+            )}
 
             {/* Sits under the button that produced it, not at the foot of the
                 panel where a scrolled-down reader would never see it. */}
