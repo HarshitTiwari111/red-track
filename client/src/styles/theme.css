@@ -3183,6 +3183,12 @@ tr.pb-detail td {
   padding: 18px 0 14px;
   justify-content: center;
 }
+/* Expanded, the toggle is pushed to the far right by margin-left:auto. On the
+   rail it is the only thing left, so that push has to be released or it sits
+   against the edge instead of centred under nothing. */
+.app.nav-collapsed .nav-toggle {
+  margin-left: 0;
+}
 .app.nav-collapsed .nav a {
   justify-content: center;
   gap: 0;
