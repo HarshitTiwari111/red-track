@@ -2137,31 +2137,17 @@ table.data tfoot td.total-label {
 /* --------------------------------------------------- source parameter rows */
 .param-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 150px auto;
-  gap: 8px;
+  grid-template-columns: 1fr 1fr 1fr 190px;
+  gap: 10px;
   align-items: start;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .param-row .rt-field {
   margin-bottom: 0;
 }
-.param-head {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 150px auto;
-  gap: 8px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-mute);
-  margin-bottom: 6px;
-}
 @media (max-width: 900px) {
-  .param-row,
-  .param-head {
+  .param-row {
     grid-template-columns: 1fr;
-  }
-  .param-head {
-    display: none;
   }
 }
 
@@ -2836,4 +2822,301 @@ tr.pb-detail td {
 }
 .viewas-clear:hover {
   color: var(--red);
+}
+
+/* ------------------------------------------- label-beside-control settings */
+/* Used by the channel modal, where the ad-platform settings read as a
+   sentence ("Cost update depth: Adset level") rather than a stacked form. */
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 14px 0 4px;
+  flex-wrap: wrap;
+}
+.inline-field > label {
+  font-size: 14px;
+  color: var(--text);
+  flex: 0 0 auto;
+}
+.inline-field > select {
+  flex: 0 1 320px;
+  min-width: 180px;
+}
+
+/* A card nested inside another card - one repeated block of a list, e.g. a
+   single CAPI pixel. Sits flat on the parent so the nesting stays readable. */
+.rt-card.sub {
+  margin: 12px 0;
+  background: var(--bg-soft, transparent);
+}
+.rt-card.sub .row-actions {
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 4px 0 12px;
+}
+.rt-card-body > .row-actions {
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+
+/* ------------------------------------------ integration cards (channel modal) */
+/* Card heading that carries a brand mark, a help affordance and a status pill. */
+.head-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.head-help {
+  color: var(--text-mute);
+  font-size: 15px;
+  cursor: help;
+  flex: 0 0 auto;
+}
+.brand-mark-meta {
+  color: #0081fb;
+  font-size: 20px;
+  flex: 0 0 auto;
+}
+
+/* Connection state. Reads as a claim about the world, so it is only ever set
+   from a real answer the server got back from the platform. */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+.status-pill svg {
+  font-size: 14px;
+}
+.status-pill.ok {
+  background: var(--green);
+  color: #fff;
+}
+.status-pill.bad {
+  background: var(--red);
+  color: #fff;
+}
+
+/* Outlined button fronted by a platform logo. */
+.brand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.brand-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.brand-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Explanatory note sitting under a control, led by an info glyph. */
+.info-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 12px 0 16px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-dim);
+}
+.info-note > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  font-size: 15px;
+  color: var(--text-mute);
+}
+
+/* One configured Conversions API destination. The detail editor spans the row
+   underneath, so the platform/pixel line stays compact until it is opened. */
+.capi-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto;
+  gap: 12px;
+  align-items: start;
+  padding: 4px 0;
+}
+.capi-detail {
+  grid-column: 1 / -1;
+  padding: 14px 14px 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+.head-icon-btn {
+  width: 36px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-mute);
+  font-size: 17px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.head-icon-btn:hover {
+  color: var(--text);
+  background: var(--bg-alt);
+}
+.head-icon-btn.danger:hover {
+  color: var(--red);
+}
+
+/* Borderless "+ Add …" action, centred under the list it appends to. */
+.link-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 6px 0 14px;
+  padding: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.link-btn:hover {
+  background: var(--accent-soft);
+}
+
+@media (max-width: 900px) {
+  .capi-row {
+    grid-template-columns: 1fr 1fr auto auto;
+  }
+}
+
+/* --------------------------------- Google integration card (channel modal) */
+.brand-mark-google {
+  font-size: 18px;
+  flex: 0 0 auto;
+}
+/* A field that shares its line with an action sitting to its right. */
+.split-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: start;
+}
+.split-row .brand-btn {
+  height: 46px;
+  white-space: nowrap;
+}
+.sub-head {
+  margin: 26px 0 14px;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--text);
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* Header + rows of a small mapping table. Required markers and the help glyphs
+   live in the header, so a row stays as plain as the values it holds. */
+.cm-head {
+  display: grid;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+.cm-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cm-head b {
+  color: var(--red);
+  font-weight: 700;
+}
+.cm-head svg {
+  color: var(--text-mute);
+  font-size: 14px;
+  cursor: help;
+  flex: 0 0 auto;
+}
+.cm-row {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+.cm-head.cm4,
+.cm-row.cm4 {
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+}
+.cm-head.cm3,
+.cm-row.cm3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+/* Last cell carries the row's own control plus its delete button. */
+.cm-tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cm-tail .rt-field {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+}
+
+.add-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 4px;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg-alt);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.add-more:hover {
+  color: var(--text);
+}
+.add-more svg {
+  font-size: 15px;
+}
+
+@media (max-width: 900px) {
+  .split-row,
+  .cm-head.cm4,
+  .cm-row.cm4,
+  .cm-head.cm3,
+  .cm-row.cm3 {
+    grid-template-columns: 1fr;
+  }
+  .cm-head {
+    display: none;
+  }
 }
