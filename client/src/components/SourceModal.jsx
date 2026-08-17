@@ -4,6 +4,7 @@ import {
   LuCircleCheck,
   LuCircleHelp,
   LuCircleX,
+  LuTriangleAlert,
   LuInfo,
   LuPencil,
   LuPlus,
@@ -170,10 +171,19 @@ export const sourceToForm = (s) => {
   };
 };
 
-const STATUS_BADGE = {
-  connected: { text: 'Connected', cls: 'ok', Icon: LuCircleCheck },
-  error: { text: 'Not connected', cls: 'bad', Icon: LuCircleX },
-  not_connected: { text: 'Not connected', cls: 'bad', Icon: LuCircleX },
+/**
+ * Signing in and being able to read the ad account are two different things,
+ * and collapsing them into one badge made a successful sign-in read as a
+ * failure. A grant that cannot see the account gets its own state.
+ */
+const statusBadge = (integration) => {
+  if (integration.status === 'connected') {
+    return { text: 'Connected', cls: 'ok', Icon: LuCircleCheck };
+  }
+  if (integration.hasRefreshToken) {
+    return { text: 'Signed in — no account access', cls: 'warn', Icon: LuTriangleAlert };
+  }
+  return { text: 'Not connected', cls: 'bad', Icon: LuCircleX };
 };
 
 export default function SourceModal({ value, onChange, onClose, onSave, saving, error }) {
@@ -300,7 +310,7 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
     .map((p) => `${p.param}=${p.macro}`)
     .join('&');
 
-  const badge = STATUS_BADGE[integration.status] || STATUS_BADGE.not_connected;
+  const badge = statusBadge(integration);
 
   return (
     <Modal

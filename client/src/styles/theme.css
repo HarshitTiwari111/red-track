@@ -3137,3 +3137,8 @@ tr.pb-detail td {
     display: none;
   }
 }
+/* A grant that exists but cannot yet read the account it was given for. */
+.status-pill.warn {
+  background: var(--amber);
+  color: #1b1300;
+}
