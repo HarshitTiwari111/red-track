@@ -63,15 +63,13 @@ const integrationSchema = new mongoose.Schema(
     // Never leaves the server - stripped by sanitizeSource below
     accessToken: { type: String, default: '', trim: true },
     /*
-     * Google's API cannot be reached with a single pasted token the way Meta's
-     * can. It needs an OAuth client the operator registers themselves, a refresh
-     * token minted against it, and a developer token that Google approves per
-     * account. All four are required before a single call succeeds.
+     * Google only. Written by the OAuth callback, never typed: the client id,
+     * secret and developer token belong to the install as a whole and live in
+     * config, so a channel carries nothing but the grant it was given.
      */
-    clientId: { type: String, default: '', trim: true },
-    clientSecret: { type: String, default: '', trim: true },
     refreshToken: { type: String, default: '', trim: true },
-    developerToken: { type: String, default: '', trim: true },
+    // Which Google account granted it, so the panel can name the connection
+    grantedEmail: { type: String, default: '', trim: true },
     status: { type: String, enum: ['not_connected', 'connected', 'error'], default: 'not_connected' },
     accountName: { type: String, default: '', trim: true },
     lastCheckAt: { type: Date, default: null },
@@ -197,7 +195,7 @@ trafficSourceSchema.index({ name: 1 });
  * transform because most reads here are .lean(), which skips transforms.
  */
 /** Integration fields the client may never read back. */
-const SECRETS = ['accessToken', 'clientSecret', 'refreshToken', 'developerToken'];
+const SECRETS = ['accessToken', 'refreshToken'];
 
 export function sanitizeSource(doc) {
   if (!doc || typeof doc !== 'object') return doc;

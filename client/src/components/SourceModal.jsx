@@ -108,17 +108,11 @@ const blankIntegration = () => ({
   adAccountId: '',
   mccId: '',
   accessToken: '',
-  clientId: '',
-  clientSecret: '',
-  refreshToken: '',
-  developerToken: '',
   status: 'not_connected',
   accountName: '',
+  grantedEmail: '',
   lastError: '',
   hasToken: false,
-  hasClientSecret: false,
-  hasRefreshToken: false,
-  hasDeveloperToken: false,
   impressionCostSync: false,
 });
 
@@ -249,6 +243,24 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
     } catch (e) {
       setVerifyMsg({ ok: false, text: e.response?.data?.error || e.message });
     } finally {
+      setVerifying(false);
+    }
+  };
+
+  /**
+   * Hand the operator to Google's consent screen. The form is saved on the way
+   * out because this leaves the page entirely - Google decides when we come
+   * back, and anything unsaved would be gone by then.
+   */
+  const signInWithGoogle = async () => {
+    setVerifying(true);
+    setVerifyMsg(null);
+    try {
+      await api.put(`/sources/${value._id}`, value);
+      const { data } = await api.post(`/sources/${value._id}/integration/google/start`);
+      window.location.href = data.url;
+    } catch (e) {
+      setVerifyMsg({ ok: false, text: e.response?.data?.error || e.message });
       setVerifying(false);
     }
   };
@@ -481,16 +493,22 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
               <button
                 type="button"
                 className="brand-btn"
-                onClick={verify}
+                onClick={integration.status === 'connected' ? verify : signInWithGoogle}
                 disabled={!value._id || verifying}
-                title={!value._id ? 'Save the channel first' : 'Check the credentials against Google'}
+                title={
+                  integration.status === 'connected'
+                    ? 'Re-check this account against Google'
+                    : 'Grant this tracker access to the ad account'
+                }
               >
                 {verifying ? <span className="spinner" /> : <SiGoogle className="brand-mark-google" />}
-                Sign in with Google
+                {integration.status === 'connected' ? 'Re-check connection' : 'Sign in with Google'}
               </button>
             </div>
             <div className="rt-hint">
-              Costs are pulled and conversions are sent for the connected ad account.
+              {integration.grantedEmail
+                ? `Access granted by ${integration.grantedEmail}. Costs are pulled and conversions are sent for this ad account.`
+                : 'Costs are pulled and conversions are sent for the connected ad account.'}
             </div>
 
             {/* Sits under the button that produced it, not at the foot of the
@@ -509,54 +527,6 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
               Add an MCC account id to send conversions to it and not the ad account (optional).
               <br />
               Make sure the credentials below can reach both the ad account and the MCC.
-            </div>
-
-            {/*
-              Google has no shared app to sign in through, so these four are the
-              sign-in. They are listed in the order you obtain them.
-            */}
-            <div className="field-row">
-              <Field label="OAuth client ID">
-                <input
-                  type="text"
-                  className="mono"
-                  value={integration.clientId}
-                  onChange={(e) => setIntegration({ clientId: e.target.value })}
-                  placeholder="…apps.googleusercontent.com"
-                />
-              </Field>
-              <Field label="OAuth client secret">
-                <input
-                  type="password"
-                  className="mono"
-                  autoComplete="new-password"
-                  value={integration.clientSecret || ''}
-                  onChange={(e) => setIntegration({ clientSecret: e.target.value })}
-                  placeholder={integration.hasClientSecret ? '••••••••••••' : 'GOCSPX-…'}
-                />
-              </Field>
-            </div>
-            <div className="field-row">
-              <Field label="OAuth refresh token">
-                <input
-                  type="password"
-                  className="mono"
-                  autoComplete="new-password"
-                  value={integration.refreshToken || ''}
-                  onChange={(e) => setIntegration({ refreshToken: e.target.value })}
-                  placeholder={integration.hasRefreshToken ? '••••••••••••' : '1//…'}
-                />
-              </Field>
-              <Field label="Developer token">
-                <input
-                  type="password"
-                  className="mono"
-                  autoComplete="new-password"
-                  value={integration.developerToken || ''}
-                  onChange={(e) => setIntegration({ developerToken: e.target.value })}
-                  placeholder={integration.hasDeveloperToken ? '••••••••••••' : 'Google Ads API centre'}
-                />
-              </Field>
             </div>
 
             <h4 className="sub-head">Conversion Matching</h4>
@@ -691,13 +661,11 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
             <div className="info-note">
               <LuInfo />
               <div>
-                Google has no shared sign-in for self-hosted trackers, so the four credentials above
-                are the connection.
+                Allow this tracker to access your Google Ads account to activate the integration:
                 <br />
-                #1 Create an OAuth client in Google Cloud Console and mint a refresh token with it.
+                #1 Click &quot;Sign in with Google&quot; and accept the permissions.
                 <br />
-                #2 Request a developer token in the Google Ads API Center, then fill in the fields
-                and save.
+                #2 Once accepted, fill in the remaining fields and save the changes.
               </div>
             </div>
           </div>

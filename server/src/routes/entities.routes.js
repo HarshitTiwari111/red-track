@@ -9,7 +9,14 @@ import TrafficSource, {
 } from '../models/TrafficSource.js';
 import { catalogSummary, getCatalogEntry } from '../services/sourceCatalog.service.js';
 import { verifyMetaAccount } from '../services/meta.service.js';
-import { verifyGoogleAccount } from '../services/google.service.js';
+import jwt from 'jsonwebtoken';
+import {
+  buildAuthUrl,
+  exchangeCode,
+  googleConfigured,
+  redirectUri,
+  verifyGoogleAccount,
+} from '../services/google.service.js';
 import AffiliateNetwork, { POSTBACK_ROLES, DUPLICATE_MODES } from '../models/AffiliateNetwork.js';
 import { networkCatalogSummary, getNetworkTemplate } from '../services/networkCatalog.service.js';
 import Offer from '../models/Offer.js';
@@ -55,15 +62,13 @@ const normalizeSource = async (body, existing = null) => {
     // Secrets are never sent back to the client, so an edit round-trip arrives
     // without them. Absent means "leave it alone"; only an explicit value
     // replaces one, and an explicit empty string clears it.
-    const secret = (key) =>
-      typeof inc[key] === 'string' ? str(inc[key], 512) : prev[key] || '';
     const secrets = {
-      accessToken: secret('accessToken'),
-      // Not a secret - an OAuth client id is public, so it round-trips normally
-      clientId: str(inc.clientId, 256),
-      clientSecret: secret('clientSecret'),
-      refreshToken: secret('refreshToken'),
-      developerToken: secret('developerToken'),
+      accessToken:
+        typeof inc.accessToken === 'string' ? str(inc.accessToken, 512) : prev.accessToken || '',
+      // Written only by the OAuth callback. Saving the form must never be able
+      // to set or clear a grant Google made.
+      refreshToken: prev.refreshToken || '',
+      grantedEmail: prev.grantedEmail || '',
     };
 
     const adAccountId = str(inc.adAccountId, 64).replace(/^act_/, '');
@@ -197,7 +202,77 @@ router.post(
 );
 
 /**
- * Check the stored Meta credentials against the Graph API and record the
+ * Begin Google's consent flow for one channel.
+ *
+ * The state is a signed, short-lived token rather than the raw channel id: the
+ * callback arrives as a plain browser redirect, so anything unsigned there
+ * could be forged to attach an attacker's Google grant to someone's channel.
+ */
+router.post(
+  '/sources/:id/integration/google/start',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    if (!googleConfigured()) {
+      throw badRequest(
+        'Google sign-in is not set up on this server. Register an OAuth client in Google Cloud Console and set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.'
+      );
+    }
+    const doc = await TrafficSource.findById(req.params.id).lean();
+    if (!doc) throw notFound();
+    if (!ownsDoc(req, doc)) throw forbidden();
+
+    const state = jwt.sign({ sid: String(doc._id), uid: String(req.user.uid) }, config.jwtSecret, {
+      expiresIn: '10m',
+    });
+    res.json({ url: buildAuthUrl(state), redirectUri: redirectUri() });
+  })
+);
+
+/**
+ * Where Google sends the operator back. Reached by a browser redirect, not by
+ * the app's own fetch, so it answers with a page rather than JSON and carries
+ * no session of its own - the signed state is what identifies the channel.
+ */
+router.get(
+  '/oauth/google/callback',
+  asyncRoute(async (req, res) => {
+    const done = (ok, message) =>
+      res.redirect(`/sources?google=${ok ? 'ok' : 'error'}&message=${encodeURIComponent(message)}`);
+
+    if (req.query.error) return done(false, String(req.query.error).slice(0, 200));
+
+    let claims;
+    try {
+      claims = jwt.verify(String(req.query.state || ''), config.jwtSecret);
+    } catch {
+      return done(false, 'That sign-in link expired. Open the channel and try again.');
+    }
+
+    const doc = await TrafficSource.findById(claims.sid);
+    if (!doc) return done(false, 'That traffic channel no longer exists.');
+
+    const granted = await exchangeCode(String(req.query.code || ''));
+    if (!granted.ok) return done(false, granted.error);
+
+    doc.integration.provider = 'google';
+    doc.integration.refreshToken = granted.refreshToken;
+    doc.integration.grantedEmail = granted.email;
+    // Signing in proves nothing about the ad account itself, so the connection
+    // is only called good once the account has actually been read back.
+    const check = await verifyGoogleAccount(doc.integration);
+    doc.integration.status = check.ok ? 'connected' : 'error';
+    doc.integration.accountName = check.ok ? check.accountName : '';
+    doc.integration.lastError = check.ok ? '' : check.error;
+    doc.integration.lastCheckAt = new Date();
+    await doc.save();
+    await refreshCache();
+
+    return done(check.ok, check.ok ? `Connected to ${check.accountName}` : check.error);
+  })
+);
+
+/**
+ * Re-check a channel's stored credentials against the platform and record the
  * verdict, so the badge in the UI reflects a real answer rather than the fact
  * that someone typed something into the field.
  */

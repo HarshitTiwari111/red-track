@@ -165,6 +165,26 @@ export default function Sources() {
     load();
   }, [load]);
 
+  /**
+   * Google's consent screen sends the operator back here with the outcome on
+   * the URL, because the round trip leaves the app entirely and there is no
+   * open modal left to report into. The query is cleared once read, so a
+   * refresh does not replay a stale result.
+   */
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const result = q.get('google');
+    if (!result) return;
+    const message = q.get('message') || '';
+    if (result === 'ok') {
+      setNotice(message || 'Google account connected.');
+      setTimeout(() => setNotice(''), 6000);
+    } else {
+      setError(message || 'Google sign-in failed.');
+    }
+    window.history.replaceState({}, '', window.location.pathname);
+  }, []);
+
   useEffect(() => {
     const onDoc = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenu(null);

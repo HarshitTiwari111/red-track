@@ -1,24 +1,49 @@
 /**
- * Google Ads API credential checks.
+ * Google sign-in and Google Ads API calls.
  *
- * Google gates this API behind three separate things, and all of them have to be
- * in place before a single call succeeds:
+ * The OAuth client belongs to the install, not to a traffic channel: it is
+ * registered once in Google Cloud Console and read from config here. A channel
+ * therefore asks for nothing but the ad account id - pressing "Sign in with
+ * Google" sends the operator through Google's consent screen, and the refresh
+ * token that comes back is stored against that channel.
  *
- *   1. an OAuth client (client id + secret) registered in a Google Cloud project
- *      the operator owns - there is no shared app to sign in through;
- *   2. a refresh token minted against that client by the account that can see
- *      the ad account;
- *   3. a developer token, which Google issues per manager account and approves
- *      by hand. A brand-new one is limited to test accounts until then.
- *
- * That is why there is no one-click "Sign in with Google" here. The checks below
- * report exactly which of the three is missing, so the answer to "why is it not
- * connected" is never a guess.
+ * The developer token is a separate gate. Google issues it per manager account
+ * and approves it by hand, and until that happens calls reach the API and are
+ * refused. It is config too, for the same reason: one install, one token.
  */
 
+import config from '../config/env.js';
+
+const OAUTH_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const ADS_API = 'https://googleads.googleapis.com/v18';
 const TIMEOUT_MS = 8000;
+
+/** Where Google sends the operator back. Must match the Cloud Console entry. */
+export const redirectUri = () => `${config.baseUrl}/api/v1/oauth/google/callback`;
+
+export const googleConfigured = () => config.google.configured;
+
+/**
+ * The consent screen URL. `prompt=consent` with `access_type=offline` is what
+ * makes Google hand back a refresh token; without it a second authorisation of
+ * the same account returns only a short-lived access token and the connection
+ * silently stops working an hour later.
+ */
+export function buildAuthUrl(state) {
+  const params = new URLSearchParams({
+    client_id: config.google.clientId,
+    redirect_uri: redirectUri(),
+    response_type: 'code',
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true',
+    scope: 'https://www.googleapis.com/auth/adwords email',
+    state,
+  });
+  return `${OAUTH_AUTH_URL}?${params}`;
+}
 
 async function call(url, init = {}) {
   const ctrl = new AbortController();
@@ -45,20 +70,45 @@ async function call(url, init = {}) {
 /** Google Ads customer ids are shown with dashes and sent without them. */
 const digits = (v) => String(v || '').replace(/\D/g, '');
 
-/** Trade the stored refresh token for a short-lived access token. */
-async function accessToken({ clientId, clientSecret, refreshToken }) {
-  const res = await call(OAUTH_TOKEN_URL, {
+const tokenRequest = (fields) =>
+  call(OAUTH_TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
+      client_id: config.google.clientId,
+      client_secret: config.google.clientSecret,
+      ...fields,
     }).toString(),
   });
-  if (!res.ok) return { ok: false, error: `OAuth refresh failed: ${res.error}` };
+
+/** Trade the stored refresh token for a short-lived access token. */
+async function accessToken(refreshToken) {
+  const res = await tokenRequest({ refresh_token: refreshToken, grant_type: 'refresh_token' });
+  if (!res.ok) return { ok: false, error: `Google sign-in expired: ${res.error}` };
   return { ok: true, token: res.body.access_token };
+}
+
+/**
+ * Finish the consent round trip: turn the one-time code into a refresh token
+ * and find out which account granted it, so the panel can name the connection.
+ */
+export async function exchangeCode(code) {
+  const res = await tokenRequest({
+    code,
+    grant_type: 'authorization_code',
+    redirect_uri: redirectUri(),
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+  if (!res.body.refresh_token) {
+    // Google withholds it when the account has already granted this client and
+    // the request did not force the consent screen.
+    return { ok: false, error: 'Google returned no refresh token — remove this app at myaccount.google.com/permissions and try again' };
+  }
+
+  const who = await call(USERINFO_URL, {
+    headers: { authorization: `Bearer ${res.body.access_token}` },
+  });
+  return { ok: true, refreshToken: res.body.refresh_token, email: who.ok ? who.body?.email || '' : '' };
 }
 
 /**
@@ -69,23 +119,24 @@ async function accessToken({ clientId, clientSecret, refreshToken }) {
 export async function verifyGoogleAccount(integration) {
   const customerId = digits(integration?.adAccountId);
   const loginCustomerId = digits(integration?.mccId);
-  const { clientId, clientSecret, refreshToken, developerToken } = integration || {};
 
   if (!customerId) return { ok: false, error: 'Google Ads Account ID is required' };
-  if (!clientId || !clientSecret) {
-    return { ok: false, error: 'OAuth client ID and secret are required — create them in Google Cloud Console' };
+  if (!integration?.refreshToken) {
+    return { ok: false, error: 'Not signed in — press Sign in with Google first' };
   }
-  if (!refreshToken) return { ok: false, error: 'OAuth refresh token is required' };
-  if (!developerToken) {
-    return { ok: false, error: 'Developer token is required — Google issues it per manager account' };
+  if (!config.google.developerToken) {
+    return {
+      ok: false,
+      error: 'This install has no Google Ads developer token — request one in the Google Ads API Center and set GOOGLE_DEVELOPER_TOKEN',
+    };
   }
 
-  const auth = await accessToken({ clientId, clientSecret, refreshToken });
+  const auth = await accessToken(integration.refreshToken);
   if (!auth.ok) return { ok: false, error: auth.error };
 
   const headers = {
     authorization: `Bearer ${auth.token}`,
-    'developer-token': developerToken,
+    'developer-token': config.google.developerToken,
     'content-type': 'application/json',
   };
   // Only set when an MCC is configured: sending it without access to that

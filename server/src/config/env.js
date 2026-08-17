@@ -22,6 +22,26 @@ export const config = {
   telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
   nodeEnv: process.env.NODE_ENV || 'development',
   /**
+   * The tracker's own Google identity, registered once by whoever runs this
+   * install - not per traffic channel.
+   *
+   * A channel then needs nothing but the ad account id: "Sign in with Google"
+   * sends the operator through Google's consent screen and the refresh token
+   * that comes back is stored against that channel. This mirrors how a hosted
+   * tracker works, where the vendor's client id is baked into the product.
+   *
+   * The developer token is separate from OAuth and is what Google approves per
+   * manager account. Until one is issued, calls reach the API and are refused.
+   */
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    developerToken: process.env.GOOGLE_DEVELOPER_TOKEN || '',
+    get configured() {
+      return !!(this.clientId && this.clientSecret);
+    },
+  },
+  /**
    * How many reverse proxies sit in front of the app.
    *
    * Defaults to 0 (trust nothing) because any value above 0 makes req.ip come
