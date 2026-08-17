@@ -157,11 +157,11 @@ export default function LanderModal({
         Traffic domain.
       </div>
 
-      <CopyField label="Click URL" value={`${origin}/go`} />
+      <CopyField label="Click URL" value={`${origin}/click`} />
       <div className="rt-hint">
         Replace the offer link (hop link) on your landing page with this URL — it records the LP click
         and sends the visitor to the offer chosen for them. You can add parameters, e.g.{' '}
-        <span className="mono">/go?sub15=variation1</span>, to tell variations apart. Add{' '}
+        <span className="mono">/click?sub15=variation1</span>, to tell variations apart. Add{' '}
         <span className="mono">?off=&lt;offerId&gt;</span> to force one specific offer.
       </div>
 

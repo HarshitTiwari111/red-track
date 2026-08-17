@@ -4,7 +4,7 @@
  *   <script src="https://track.example.com/track.js" data-kcmp="my-campaign"></script>
  * It registers the visit server-side (so Google Ads sees the real landing page URL),
  * stores the clickid in a first-party cookie and rewires outbound offer links
- * through /go.
+ * through /click.
  */
 export function trackScript(baseUrl) {
   return `/* KAP Tracker - universal no-redirect tracking script */
@@ -43,7 +43,7 @@ export function trackScript(baseUrl) {
 
   /**
    * data-kap-links:
-   *   auto   (default) every outbound link is rewired through /go
+   *   auto   (default) every outbound link is rewired through /click
    *   tagged           only links marked data-kap-go
    *   stay             nothing navigates - the click is recorded in the
    *                    background and the visitor stays on the page
@@ -74,20 +74,29 @@ export function trackScript(baseUrl) {
     return probe.host !== w.location.host;
   }
 
+  /*
+   * Is this href already the tracker's hop link? Both names count: /click is
+   * what pages are given now, /go is what they were given before, and a page
+   * carrying either must not be wrapped in a second hop.
+   */
+  function isHop(href) {
+    return href.indexOf(BASE + '/click') === 0 || href.indexOf(BASE + '/go') === 0;
+  }
+
   function goUrl(a, clickid) {
     var off = a.getAttribute('data-kap-offer') || '';
     var href = a.getAttribute('href') || '';
-    if (href.indexOf(BASE + '/go') === 0) {
+    if (isHop(href)) {
       return href.indexOf('clickid=') > -1
         ? href
         : href + (href.indexOf('?') > -1 ? '&' : '?') + 'clickid=' + encodeURIComponent(clickid);
     }
-    return BASE + '/go?clickid=' + encodeURIComponent(clickid) + (off ? '&off=' + encodeURIComponent(off) : '');
+    return BASE + '/click?clickid=' + encodeURIComponent(clickid) + (off ? '&off=' + encodeURIComponent(off) : '');
   }
 
   function shouldRewrite(a) {
     if (a.getAttribute('data-kap-go') !== null) return true;
-    if ((a.getAttribute('href') || '').indexOf(BASE + '/go') === 0) return true;
+    if (isHop(a.getAttribute('href') || '')) return true;
     return AUTO && isOutbound(a);
   }
 
@@ -109,7 +118,7 @@ export function trackScript(baseUrl) {
         var a = ev.target;
         while (a && a.tagName !== 'A') a = a.parentNode;
         if (!a || !a.getAttribute) return;
-        if ((a.getAttribute('href') || '').indexOf(BASE + '/go') === 0) return;
+        if (isHop(a.getAttribute('href') || '')) return;
         if (shouldRewrite(a)) a.setAttribute('href', goUrl(a, clickid));
       },
       true
@@ -134,9 +143,9 @@ export function trackScript(baseUrl) {
     return null;
   }
 
-  /** Record the lander click-through without navigating: /go answers 204 here. */
+  /** Record the lander click-through without navigating: /click answers 204 here. */
   function beacon(clickid, off) {
-    var url = BASE + '/go?beacon=1&clickid=' + encodeURIComponent(clickid) + (off ? '&off=' + encodeURIComponent(off) : '');
+    var url = BASE + '/click?beacon=1&clickid=' + encodeURIComponent(clickid) + (off ? '&off=' + encodeURIComponent(off) : '');
     try {
       if (w.fetch) {
         w.fetch(url, { mode: 'cors', credentials: 'include', keepalive: true })['catch'](function () {});

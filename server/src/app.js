@@ -131,7 +131,7 @@ export function createApp() {
      * prefix, "postback" also swallowed the /postbacks dashboard page and left
      * it 404ing. Only /api/ and /c/ are genuine prefixes.
      */
-    app.get(/^\/(?!api\/|c\/|(?:go|postback|postback\.js|pixel\.gif|track\.js|health)$).*/, (req, res) => {
+    app.get(/^\/(?!api\/|c\/|(?:click|go|postback|postback\.js|pixel\.gif|track\.js|health)$).*/, (req, res) => {
       securityHeaders(req, res, () => {});
       res.sendFile(distIndex);
     });

@@ -90,26 +90,34 @@ router.get('/c/:slug', (req, res) => {
 });
 
 /* ---------------------------------------------------------------------- /go */
-router.options('/go', openCors, (req, res) => res.sendStatus(204));
+/*
+ * The landing page's hop link. /click is the name landing pages are given;
+ * /go is what it used to be called and still answers, because pages already
+ * carrying that link are out in the world and renaming a route does not go
+ * and edit them.
+ */
+const CLICK_PATHS = ['/click', '/go'];
+
+router.options(CLICK_PATHS, openCors, (req, res) => res.sendStatus(204));
 
 /**
  * `?beacon=1` records the lander click-through and answers 204 instead of
  * redirecting, for landers whose CTA must not navigate the visitor away.
  * Reached cross-origin from the lander, hence openCors.
  */
-router.get('/go', openCors, async (req, res) => {
+router.get(CLICK_PATHS, openCors, async (req, res) => {
   const beacon = req.query.beacon === '1' || req.query.beacon === 'true';
   const clickid = str(req.query.clickid || req.cookies?.[CLICK_COOKIE], 64);
   noStore(res);
   try {
     if (!clickid) {
-      logClickError({ route: '/go', reason: 'missing clickid', ip: clientIp(req), query: req.query });
+      logClickError({ route: req.path, reason: 'missing clickid', ip: clientIp(req), query: req.query });
       return res.status(400).type('text/plain').send('Missing clickid');
     }
 
     const click = await Click.findOne({ clickid }).lean();
     if (!click) {
-      logClickError({ route: '/go', reason: 'unknown clickid', ip: clientIp(req), query: req.query });
+      logClickError({ route: req.path, reason: 'unknown clickid', ip: clientIp(req), query: req.query });
       return res.status(404).type('text/plain').send('Unknown clickid');
     }
 
@@ -124,7 +132,7 @@ router.get('/go', openCors, async (req, res) => {
     }
 
     if (!offer) {
-      logClickError({ route: '/go', reason: 'no offer resolved', ip: clientIp(req), query: req.query });
+      logClickError({ route: req.path, reason: 'no offer resolved', ip: clientIp(req), query: req.query });
       return res.status(503).type('text/plain').send('No offer configured');
     }
 
@@ -150,7 +158,7 @@ router.get('/go', openCors, async (req, res) => {
     }
     return undefined;
   } catch (err) {
-    logClickError({ route: '/go', reason: err.message, ip: clientIp(req), query: req.query });
+    logClickError({ route: req.path, reason: err.message, ip: clientIp(req), query: req.query });
     if (!res.headersSent) res.status(500).type('text/plain').send('Tracking error');
     return undefined;
   }
