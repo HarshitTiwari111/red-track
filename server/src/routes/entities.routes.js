@@ -12,7 +12,6 @@ import { verifyMetaAccount } from '../services/meta.service.js';
 import jwt from 'jsonwebtoken';
 import {
   buildAuthUrl,
-  exchangeCode,
   googleConfigured,
   redirectUri,
   verifyGoogleAccount,
@@ -214,7 +213,7 @@ router.post(
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
     if (!googleConfigured()) {
       throw badRequest(
-        'Google sign-in is not set up on this server. Register an OAuth client in Google Cloud Console and set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.'
+        'Google sign-in is not set up. The Google Ads proxy needs a sign-in endpoint that returns a refresh token, and its address must be set as GOOGLE_ADS_AUTH_URL.'
       );
     }
     const doc = await TrafficSource.findById(req.params.id).lean();
@@ -229,9 +228,10 @@ router.post(
 );
 
 /**
- * Where Google sends the operator back. Reached by a browser redirect, not by
- * the app's own fetch, so it answers with a page rather than JSON and carries
- * no session of its own - the signed state is what identifies the channel.
+ * Where the proxy sends the operator back, carrying the refresh token Google
+ * issued. Reached by a browser redirect rather than the app's own fetch, so it
+ * answers with a redirect rather than JSON, and the signed state - not anything
+ * the URL claims about which channel this is - is what identifies the channel.
  */
 router.get(
   '/oauth/google/callback',
@@ -251,12 +251,14 @@ router.get(
     const doc = await TrafficSource.findById(claims.sid);
     if (!doc) return done(false, 'That traffic channel no longer exists.');
 
-    const granted = await exchangeCode(String(req.query.code || ''));
-    if (!granted.ok) return done(false, granted.error);
+    const refreshToken = str(req.query.refresh_token || req.query.token, 512);
+    if (!refreshToken) {
+      return done(false, 'The sign-in returned no refresh token. Check the proxy sends one back.');
+    }
 
     doc.integration.provider = 'google';
-    doc.integration.refreshToken = granted.refreshToken;
-    doc.integration.grantedEmail = granted.email;
+    doc.integration.refreshToken = refreshToken;
+    doc.integration.grantedEmail = str(req.query.email, 200);
     // Signing in proves nothing about the ad account itself, so the connection
     // is only called good once the account has actually been read back.
     const check = await verifyGoogleAccount(doc.integration);

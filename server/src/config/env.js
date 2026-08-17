@@ -22,24 +22,21 @@ export const config = {
   telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
   nodeEnv: process.env.NODE_ENV || 'development',
   /**
-   * The tracker's own Google identity, registered once by whoever runs this
-   * install - not per traffic channel.
+   * Google Ads is reached through a proxy the operator runs, which holds the
+   * OAuth client and the developer token. Both are properties of the install
+   * rather than of any one traffic channel, and neither belongs in this app:
+   * a request carries only the refresh token of the account that granted
+   * access, and the proxy makes it a real Google Ads call.
    *
-   * A channel then needs nothing but the ad account id: "Sign in with Google"
-   * sends the operator through Google's consent screen and the refresh token
-   * that comes back is stored against that channel. This mirrors how a hosted
-   * tracker works, where the vendor's client id is baked into the product.
-   *
-   * The developer token is separate from OAuth and is what Google approves per
-   * manager account. Until one is issued, calls reach the API and are refused.
+   * `authUrl` is where the proxy runs the consent screen. It is separate
+   * because the proxy's API surface and its sign-in surface need not share a
+   * host, and because an install with no sign-in endpoint yet should say so
+   * rather than send the operator somewhere that 404s.
    */
-  google: {
-    clientId: process.env.GOOGLE_CLIENT_ID || '',
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    developerToken: process.env.GOOGLE_DEVELOPER_TOKEN || '',
-    get configured() {
-      return !!(this.clientId && this.clientSecret);
-    },
+  googleAds: {
+    proxyUrl: process.env.GOOGLE_ADS_PROXY || 'https://secure.dataram.workers.dev/api',
+    apiVersion: process.env.GOOGLE_ADS_API_VERSION || 'v24',
+    authUrl: process.env.GOOGLE_ADS_AUTH_URL || '',
   },
   /**
    * How many reverse proxies sit in front of the app.
