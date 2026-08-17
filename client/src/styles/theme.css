@@ -217,7 +217,8 @@ h1, h2, h3, h4 {
   color: var(--sidebar-muted);
   padding: 6px 10px;
 }
-.nav a {
+.nav a,
+.nav .nav-branch {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -228,7 +229,8 @@ h1, h2, h3, h4 {
   margin-bottom: 1px;
   transition: none;
 }
-.nav a:hover {
+.nav a:hover,
+.nav .nav-branch:hover {
   background: var(--sidebar-hover);
   color: var(--sidebar-strong);
   text-decoration: none;
@@ -3188,9 +3190,41 @@ tr.pb-detail td {
   padding-left: 0;
   padding-right: 0;
 }
-/* Without this the groups run together once their headings are hidden */
-.app.nav-collapsed .nav-group + .nav-group {
-  border-top: 1px solid var(--sidebar-border);
-  padding-top: 8px;
-  margin-top: 8px;
+
+/* --------------------------------------------------- nav group with children */
+/* Matches a plain nav link, because it sits in the same column and only
+   behaves differently once opened. */
+.nav-branch {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.nav-caret {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  opacity: 0.75;
+}
+.nav-sub {
+  display: flex;
+  flex-direction: column;
+}
+/* Indented under the parent, and quieter: these are places you go to look
+   something up, not places you work. */
+.nav-sub a {
+  padding-left: 34px;
+  font-size: 13px;
+}
+.app.nav-collapsed .nav-caret {
+  display: none;
+}
+.app.nav-collapsed .nav-branch {
+  justify-content: center;
+  gap: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
