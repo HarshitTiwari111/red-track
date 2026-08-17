@@ -163,7 +163,6 @@ const STATUS_BADGE = {
 
 export default function SourceModal({ value, onChange, onClose, onSave, saving, error }) {
   const [macros, setMacros] = useState([]);
-  const [showOptional, setShowOptional] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState(null);
   const [editingPixel, setEditingPixel] = useState(null);
@@ -395,11 +394,66 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
                 placeholder="fbclid"
               />
             </Field>
+            {/* Sits beside Click Ref ID because it is the same kind of thing:
+                which incoming query parameter carries which known value. */}
+            <Field label="Click cost ID">
+              <input
+                type="text"
+                className="mono"
+                value={value.costParam}
+                onChange={(e) => set({ costParam: e.target.value })}
+                placeholder="cost"
+              />
+            </Field>
             <Field label="External ID">
               <input
                 type="text"
                 value={value.externalId}
                 onChange={(e) => set({ externalId: e.target.value })}
+              />
+            </Field>
+          </div>
+
+          <Field label="S2S postback template">
+            <input
+              type="text"
+              className="mono"
+              value={value.s2sPostbackTemplate}
+              onChange={(e) => set({ s2sPostbackTemplate: e.target.value })}
+              placeholder="https://source.com/postback?clickid={sub1}&payout={payout}&status={status}"
+            />
+          </Field>
+          <div className="rt-hint">
+            Fired on every conversion for campaigns that have no forwarding of their own.
+          </div>
+
+          {macros.length > 0 && (
+            <details style={{ margin: '0 0 18px' }}>
+              <summary className="dim" style={{ cursor: 'pointer', fontSize: 13 }}>
+                Tracker macros available in the postback template
+              </summary>
+              <div className="macro-chips" style={{ marginTop: 10 }}>
+                {macros.map((m) => (
+                  <span className="macro-chip" key={m}>
+                    {`{${m}}`}
+                  </span>
+                ))}
+              </div>
+            </details>
+          )}
+
+          <div className="field-row">
+            <Field label="Status">
+              <select value={value.status} onChange={(e) => set({ status: e.target.value })}>
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+              </select>
+            </Field>
+            <Field label="Notes">
+              <input
+                type="text"
+                value={value.notes || ''}
+                onChange={(e) => set({ notes: e.target.value })}
               />
             </Field>
           </div>
@@ -846,60 +900,6 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
             </div>
           </div>
         </>
-      )}
-
-      <button type="button" className="btn" onClick={() => setShowOptional((s) => !s)}>
-        Optional settings {showOptional ? '⌃' : '⌄'}
-      </button>
-
-      {showOptional && (
-        <div style={{ marginTop: 16 }}>
-          <Field
-            label="S2S postback template"
-            hint="Fired on every conversion for campaigns that have no forwarding of their own. Supports all macros."
-          >
-            <input
-              type="text"
-              className="mono"
-              value={value.s2sPostbackTemplate}
-              onChange={(e) => set({ s2sPostbackTemplate: e.target.value })}
-              placeholder="https://source.com/postback?clickid={sub1}&payout={payout}&status={status}"
-            />
-          </Field>
-          <Field label="Click cost ID" hint="Query parameter carrying the click cost.">
-            <input
-              type="text"
-              className="mono"
-              value={value.costParam}
-              onChange={(e) => set({ costParam: e.target.value })}
-              placeholder="cost"
-            />
-          </Field>
-          <Field label="Status">
-            <select value={value.status} onChange={(e) => set({ status: e.target.value })}>
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
-            </select>
-          </Field>
-          <Field label="Notes">
-            <textarea value={value.notes || ''} onChange={(e) => set({ notes: e.target.value })} />
-          </Field>
-
-          {macros.length > 0 && (
-            <details style={{ margin: '14px 0 4px' }}>
-              <summary className="dim" style={{ cursor: 'pointer', fontSize: 13 }}>
-                Tracker macros available in the postback template
-              </summary>
-              <div className="macro-chips" style={{ marginTop: 10 }}>
-                {macros.map((m) => (
-                  <span className="macro-chip" key={m}>
-                    {`{${m}}`}
-                  </span>
-                ))}
-              </div>
-            </details>
-          )}
-        </div>
       )}
     </Modal>
   );
