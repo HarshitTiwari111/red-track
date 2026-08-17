@@ -15,6 +15,7 @@ export const blankLander = () => ({
   name: '',
   type: 'landing',
   url: '',
+  domainId: '',
   tags: [],
   status: 'active',
   notes: '',
@@ -24,10 +25,20 @@ export const landerToForm = (l) => ({
   ...blankLander(),
   ...l,
   type: l.type || 'landing',
+  domainId: l.domainId || '',
   tags: l.tags || [],
 });
 
-export default function LanderModal({ value, knownTags = [], onChange, onClose, onSave, saving, error }) {
+export default function LanderModal({
+  value,
+  knownTags = [],
+  domains = [],
+  onChange,
+  onClose,
+  onSave,
+  saving,
+  error,
+}) {
   const [macros, setMacros] = useState([]);
   const [tagDraft, setTagDraft] = useState('');
   const [showOptional, setShowOptional] = useState(false);
@@ -40,7 +51,12 @@ export default function LanderModal({ value, knownTags = [], onChange, onClose, 
   }, []);
 
   const set = (patch) => onChange({ ...value, ...patch });
-  const origin = window.location.origin;
+
+  /* Every snippet below is built on the chosen domain, then the default one,
+     then this host - so what is copied is what the visitor will actually hit. */
+  const defaultDomain = domains.find((d) => d.isDefault);
+  const chosen = domains.find((d) => String(d._id) === String(value.domainId)) || defaultDomain;
+  const origin = chosen ? `${chosen.protocol}://${chosen.host}` : window.location.origin;
 
   /** Append the macro as a query parameter named after it: ...?country={country} */
   const appendMacro = (macro) => {
@@ -122,17 +138,31 @@ export default function LanderModal({ value, knownTags = [], onChange, onClose, 
         Click a macro to append it to the URL as a query parameter. Values are filled in and URL-encoded on every click.
       </div>
 
-      <Field label="Tracking domain" required hint="Set BASE_URL in .env to use a custom tracking domain.">
-        <select value="base" disabled>
-          <option value="base">{origin.replace(/^https?:\/\//, '')}</option>
+      <Field label="Tracking domain" required>
+        <select value={value.domainId || ''} onChange={(e) => set({ domainId: e.target.value })}>
+          <option value="">
+            {defaultDomain ? `Default (${defaultDomain.host})` : origin.replace(/^https?:\/\//, '')}
+          </option>
+          {domains.map((d) => (
+            <option key={d._id} value={d._id}>
+              {d.host}
+              {d.isDefault ? ' — default' : ''}
+            </option>
+          ))}
         </select>
       </Field>
+      <div className="rt-hint">
+        Use a custom tracking domain where you can. The click URL and the script below should sit on
+        the same domain as the campaign link that brought the visitor here — set them up under
+        Traffic domain.
+      </div>
 
       <CopyField label="Click URL" value={`${origin}/go`} />
-      <div className="rt-hint" style={{ marginTop: -8, marginBottom: 18 }}>
-        Replace the offer link (hop link) on your landing page with this URL — it records the LP click and sends the
-        visitor to the offer chosen for them. Add <span className="mono">?off=&lt;offerId&gt;</span> to force one
-        specific offer.
+      <div className="rt-hint">
+        Replace the offer link (hop link) on your landing page with this URL — it records the LP click
+        and sends the visitor to the offer chosen for them. You can add parameters, e.g.{' '}
+        <span className="mono">/go?sub15=variation1</span>, to tell variations apart. Add{' '}
+        <span className="mono">?off=&lt;offerId&gt;</span> to force one specific offer.
       </div>
 
       <div className="section-title">Tags</div>
@@ -197,15 +227,23 @@ export default function LanderModal({ value, knownTags = [], onChange, onClose, 
 
       {showOptional && (
         <div style={{ marginTop: 16 }}>
-          <Field label="Status">
-            <select value={value.status} onChange={(e) => set({ status: e.target.value })}>
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
-            </select>
-          </Field>
-          <Field label="Notes">
-            <textarea value={value.notes || ''} onChange={(e) => set({ notes: e.target.value })} />
-          </Field>
+          <div className="section-title" style={{ marginBottom: 8 }}>
+            For traffic through redirects
+          </div>
+          <div className="alert warn">
+            <strong>Warning</strong>
+            <br />
+            Use this only on landing pages that receive traffic through a redirect. Do not put it on
+            the same page as the no-redirect script — both would record the same visit.
+          </div>
+          <CopyField
+            label="LP Views"
+            value={`<script type="text/javascript" src="${origin}/track.js"></script>`}
+          />
+          <div className="rt-hint">
+            Paste it into the page&apos;s HTML. It records the landing page view, which is what turns
+            LP views and LP CTR from zero into real numbers.
+          </div>
         </div>
       )}
     </Modal>

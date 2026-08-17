@@ -17,6 +17,12 @@ const landerSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     type: { type: String, enum: LANDER_TYPES, default: 'landing', index: true },
     url: { type: String, required: true, trim: true },
+    /**
+     * Which tracking domain the snippets on this page are built on. Null means
+     * the default one - the page still works, it just borrows whichever domain
+     * is default at the time.
+     */
+    domainId: { type: mongoose.Schema.Types.ObjectId, ref: 'Domain', default: null },
     tags: { type: [String], default: [], index: true },
     status: { type: String, enum: ['active', 'paused'], default: 'active' },
     notes: { type: String, default: '' },

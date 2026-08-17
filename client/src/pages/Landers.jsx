@@ -120,6 +120,7 @@ export default function Landers() {
   const [rows, setRows] = useState([]);
   const [totals, setTotals] = useState(null);
   const [knownTags, setKnownTags] = useState([]);
+  const [domains, setDomains] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -173,6 +174,14 @@ export default function Landers() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // The modal builds its click URL and script snippet on one of these
+  useEffect(() => {
+    api
+      .get('/domains')
+      .then((r) => setDomains(r.data.items || []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -619,6 +628,7 @@ export default function Landers() {
         <LanderModal
           value={editing}
           knownTags={knownTags}
+          domains={domains}
           onChange={setEditing}
           onClose={() => setEditing(null)}
           onSave={save}

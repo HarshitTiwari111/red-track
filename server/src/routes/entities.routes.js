@@ -774,6 +774,9 @@ const normalizeLander = async (body) => {
   if (!str(body.name)) throw badRequest('Name is required');
   if (!isHttpUrl(body.url)) throw badRequest('Lander URL must start with http:// or https://');
   if (body.type && !LANDER_TYPES.includes(body.type)) throw badRequest('Unknown landing page type');
+  // Empty means "the default domain", and an empty string is not an ObjectId
+  if (!body.domainId) body.domainId = null;
+  if (body.domainId && !isObjectId(body.domainId)) throw badRequest('Invalid tracking domain');
   if (Array.isArray(body.tags)) {
     body.tags = [...new Set(body.tags.map((t) => str(t, 40)).filter(Boolean))];
   }

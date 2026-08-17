@@ -3265,3 +3265,10 @@ tr.pb-detail td {
   color: var(--accent);
   text-decoration: underline;
 }
+
+/* A caution that is not an error: the thing works, but not everywhere. */
+.alert.warn {
+  background: rgba(255, 176, 32, 0.1);
+  color: var(--amber);
+  border-color: rgba(255, 176, 32, 0.3);
+}
