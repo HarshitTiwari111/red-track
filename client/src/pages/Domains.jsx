@@ -451,7 +451,16 @@ export default function Domains() {
                       </td>
                       <td className="mono">{id.slice(-8)}</td>
                       <td>
-                        <span className="mono">{r.url}</span>
+                        <button
+                          type="button"
+                          className="cell-link mono"
+                          onClick={() => {
+                            setFormError('');
+                            setEditing(domainToForm(r));
+                          }}
+                        >
+                          {r.url}
+                        </button>
                         {r.isDefault && (
                           <span className="badge approved" style={{ marginLeft: 8 }}>
                             default

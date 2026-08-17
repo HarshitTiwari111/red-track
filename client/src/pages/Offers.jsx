@@ -45,14 +45,16 @@ const DENSITIES = ['compact', 'standard', 'comfortable'];
 const money = (v) => `$ ${fmtMoney(v)}`;
 
 /** How each column renders in a body row. */
-function cellValue(row, key) {
+function cellValue(row, key, { onEdit }) {
   switch (key) {
     case 'index':
       return row.index;
     case 'name':
       return (
         <>
-          {row.name}
+          <button type="button" className="cell-link" onClick={() => onEdit(row)}>
+            {row.name}
+          </button>
           {row.cappedBy && (
             <span className="badge rejected" style={{ marginLeft: 8 }} title={`Cap reached: ${row.cappedBy}`}>
               capped
@@ -634,7 +636,7 @@ export default function Offers() {
                       </td>
                       {columns.map((c) => (
                         <td key={c.key} className={c.num ? 'num' : ''}>
-                          {cellValue(r, c.key)}
+                          {cellValue(r, c.key, { onEdit: openEdit })}
                         </td>
                       ))}
                     </tr>

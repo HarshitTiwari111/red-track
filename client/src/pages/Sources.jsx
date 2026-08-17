@@ -45,14 +45,16 @@ const ALL_COLUMNS = [
 
 const DEFAULT_HIDDEN = ['uniques', 'currency'];
 
-function cellValue(row, key) {
+function cellValue(row, key, { onEdit }) {
   switch (key) {
     case 'index':
       return row.index;
     case 'name':
       return (
         <>
-          {row.name}
+          <button type="button" className="cell-link" onClick={() => onEdit(row)}>
+            {row.name}
+          </button>
           {row.aliasChannel ? <span className="cell-sub">{row.aliasChannel}</span> : null}
         </>
       );
@@ -169,6 +171,11 @@ export default function Sources() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const openEdit = useCallback((row) => {
+    setFormError('');
+    setEditing(sourceToForm(row));
+  }, []);
 
   /**
    * Catch the refresh token the OAuth proxy appends to this page's address on
@@ -593,17 +600,14 @@ export default function Sources() {
                     <tr
                       key={id}
                       className={selected.has(id) ? 'row-selected' : ''}
-                      onDoubleClick={() => {
-                        setFormError('');
-                        setEditing(sourceToForm(r));
-                      }}
+                      onDoubleClick={() => openEdit(r)}
                     >
                       <td className="check">
                         <input type="checkbox" checked={selected.has(id)} onChange={() => toggleRow(id)} />
                       </td>
                       {columns.map((c) => (
                         <td key={c.key} className={c.num ? 'num' : ''}>
-                          {cellValue(r, c.key)}
+                          {cellValue(r, c.key, { onEdit: openEdit })}
                         </td>
                       ))}
                     </tr>

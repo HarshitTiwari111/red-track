@@ -1736,11 +1736,17 @@ textarea.pem {
   color: var(--text);
   background: var(--panel-2);
 }
+/*
+ * Apply is a cell of the filter grid, not a row under it. Aligning it to the
+ * end of its track puts it level with the inputs beside it however many of
+ * them wrap.
+ */
 .filter-actions {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
-  padding-bottom: 14px;
+  align-self: end;
+  margin-bottom: 14px;
 }
 
 /* ---------------------------------------------------------- action toolbar */
@@ -2769,14 +2775,6 @@ tr.pb-detail td {
   border-color: var(--btn-hover-border);
 }
 
-.filter-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-soft);
-}
 
 /* ------------------------------------------------------------- view as user */
 /* Quiet while off, loud while on: every figure on every page changes meaning

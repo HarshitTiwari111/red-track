@@ -465,15 +465,6 @@ export default function CampaignModal({
             placeholder="https://source.com/postback?clickid={sub1}&payout={payout}&status={status}"
           />
 
-          <ForwardCard
-            title="Click forwarding URL"
-            note="Fired on every non-bot click. Useful for mirroring traffic into a second system."
-            list={value.clickForwarding}
-            onAdd={() => addForward('clickForwarding')}
-            onChange={(i, patch) => setForward('clickForwarding', i, patch)}
-            onRemove={(i) => removeForward('clickForwarding', i)}
-            placeholder="https://mysystem.com/click?id={clickid}&geo={country}"
-          />
         </div>
 
         {/* ================================================= RIGHT COLUMN */}

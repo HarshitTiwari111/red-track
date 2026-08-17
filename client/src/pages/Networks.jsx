@@ -41,14 +41,16 @@ const ALL_COLUMNS = [
 
 const DEFAULT_HIDDEN = ['currency', 'duplicateMode', 'lpViews'];
 
-function cellValue(row, key) {
+function cellValue(row, key, { onEdit }) {
   switch (key) {
     case 'index':
       return row.index;
     case 'name':
       return (
         <>
-          {row.name}
+          <button type="button" className="cell-link" onClick={() => onEdit(row)}>
+            {row.name}
+          </button>
           <span className="cell-sub">
             {row.postbackProtection?.enabled ? '🔒 key required · ' : ''}
             {row.whitelistedIps?.enabled ? 'IP allow-list · ' : ''}
@@ -163,6 +165,11 @@ export default function Networks() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const openEdit = useCallback((row) => {
+    setFormError('');
+    setEditing(networkToForm(row));
+  }, []);
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -518,17 +525,14 @@ export default function Networks() {
                     <tr
                       key={id}
                       className={selected.has(id) ? 'row-selected' : ''}
-                      onDoubleClick={() => {
-                        setFormError('');
-                        setEditing(networkToForm(r));
-                      }}
+                      onDoubleClick={() => openEdit(r)}
                     >
                       <td className="check">
                         <input type="checkbox" checked={selected.has(id)} onChange={() => toggleRow(id)} />
                       </td>
                       {columns.map((c) => (
                         <td key={c.key} className={c.num ? 'num' : ''}>
-                          {cellValue(r, c.key)}
+                          {cellValue(r, c.key, { onEdit: openEdit })}
                         </td>
                       ))}
                     </tr>

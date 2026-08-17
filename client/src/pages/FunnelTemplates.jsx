@@ -293,7 +293,16 @@ export default function FunnelTemplates() {
                         </button>
                       </td>
                       <td>
-                        {r.name}
+                        <button
+                          type="button"
+                          className="cell-link"
+                          onClick={() => {
+                            setFormError('');
+                            setEditing(funnelToForm(r));
+                          }}
+                        >
+                          {r.name}
+                        </button>
                         {r.notes ? <span className="cell-sub">{r.notes}</span> : null}
                       </td>
                       <td>

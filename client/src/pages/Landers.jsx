@@ -41,17 +41,28 @@ const DENSITIES = ['compact', 'standard', 'comfortable'];
 const money = (v) => `$ ${fmtMoney(v)}`;
 const typeLabel = (id) => LANDER_TYPES.find((t) => t.id === id)?.label || 'Landing';
 
-function cellValue(row, key) {
+function cellValue(row, key, { onEdit }) {
   switch (key) {
     case 'index':
       return row.index;
     case 'name':
       return (
         <>
-          {row.name}
-          <span className="cell-sub" title={row.url}>
+          <button type="button" className="cell-link" onClick={() => onEdit(row)}>
+            {row.name}
+          </button>
+          {/* The page itself, opened as-is. Its click is kept off the row so
+              following the link never also opens the editor. */}
+          <a
+            className="cell-sub cell-url"
+            href={row.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title={row.url}
+          >
             {row.url}
-          </span>
+          </a>
         </>
       );
     case 'type':
@@ -174,6 +185,11 @@ export default function Landers() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const openEdit = useCallback((row) => {
+    setFormError('');
+    setEditing(landerToForm(row));
+  }, []);
 
   // The modal builds its click URL and script snippet on one of these
   useEffect(() => {
@@ -552,17 +568,14 @@ export default function Landers() {
                     <tr
                       key={id}
                       className={selected.has(id) ? 'row-selected' : ''}
-                      onDoubleClick={() => {
-                        setFormError('');
-                        setEditing(landerToForm(r));
-                      }}
+                      onDoubleClick={() => openEdit(r)}
                     >
                       <td className="check">
                         <input type="checkbox" checked={selected.has(id)} onChange={() => toggleRow(id)} />
                       </td>
                       {columns.map((c) => (
                         <td key={c.key} className={c.num ? 'num' : ''}>
-                          {cellValue(r, c.key)}
+                          {cellValue(r, c.key, { onEdit: openEdit })}
                         </td>
                       ))}
                     </tr>
