@@ -87,6 +87,7 @@ export default function Layout() {
     <div className={`app${collapsed ? ' nav-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-brand">
+          <div className="brand-mark">K</div>
           <button
             type="button"
             className="nav-toggle"
@@ -97,11 +98,6 @@ export default function Layout() {
           >
             <LuMenu />
           </button>
-          <div className="brand-mark">K</div>
-          <div className="brand-text">
-            KAP Tracker
-            <small>self-hosted</small>
-          </div>
         </div>
 
         <nav className="nav">

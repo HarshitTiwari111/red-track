@@ -180,19 +180,6 @@ h1, h2, h3, h4 {
   font-size: 15px;
 }
 
-.brand-text {
-  font-weight: 650;
-  font-size: 15px;
-  letter-spacing: 0.02em;
-}
-.brand-text small {
-  display: block;
-  font-size: 10px;
-  color: var(--sidebar-muted);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 
 .nav {
   padding: 12px 10px;
@@ -3147,6 +3134,7 @@ tr.pb-detail td {
 
 /* ------------------------------------------------- collapsible sidebar */
 .nav-toggle {
+  margin-left: auto;
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
@@ -3174,10 +3162,15 @@ tr.pb-detail td {
 .app.nav-collapsed {
   --sidebar-w: 62px;
 }
-.app.nav-collapsed .brand-mark,
-.app.nav-collapsed .brand-text,
 .app.nav-collapsed .nav-text,
 .app.nav-collapsed .nav-label {
+  display: none;
+}
+/*
+ * The mark goes, not the toggle: on a 62px rail there is room for one of
+ * them, and the toggle is the only way back out of the collapsed state.
+ */
+.app.nav-collapsed .brand-mark {
   display: none;
 }
 .app.nav-collapsed .sidebar-brand {
