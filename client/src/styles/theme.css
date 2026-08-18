@@ -3276,3 +3276,29 @@ tr.pb-detail td {
   color: var(--amber);
   border-color: rgba(255, 176, 32, 0.3);
 }
+
+/* ------------------------------------------------ breadcrumb + detail list */
+.breadcrumb {
+  font-size: 13px;
+  color: var(--text-mute);
+  margin: -6px 0 16px;
+}
+.breadcrumb span {
+  margin: 0 6px;
+}
+
+/* Label/value pairs in a details panel. */
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 18px;
+  margin: 0 0 14px;
+  font-size: 13.5px;
+}
+.kv dt {
+  color: var(--text-mute);
+}
+.kv dd {
+  margin: 0;
+  word-break: break-word;
+}

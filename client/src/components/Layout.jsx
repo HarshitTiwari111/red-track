@@ -21,6 +21,7 @@ import {
   LuScrollText,
   LuChevronDown,
   LuChevronRight,
+  LuShieldCheck,
 } from 'react-icons/lu';
 
 /**
@@ -40,6 +41,7 @@ const NAV = [
   { to: '/funnels', Icon: LuFilter, text: 'Funnel templates' },
   { to: '/domains', Icon: LuGlobe, text: 'Traffic domain' },
   { to: '/conversion-tracking', Icon: LuRepeat, text: 'Conversion tracking' },
+  { to: '/capi', Icon: LuShieldCheck, text: 'CAPI Integrations' },
   {
     key: 'logs',
     Icon: LuScrollText,

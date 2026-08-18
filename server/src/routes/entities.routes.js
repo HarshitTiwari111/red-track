@@ -19,6 +19,7 @@ import AffiliateNetwork, { POSTBACK_ROLES, DUPLICATE_MODES } from '../models/Aff
 import { networkCatalogSummary, getNetworkTemplate } from '../services/networkCatalog.service.js';
 import Offer, { sanitizeOffer } from '../models/Offer.js';
 import { normalizeCapiPixels } from '../models/capiPixel.js';
+import MetaPixel, { ACTION_SOURCES, sanitizeMetaPixel } from '../models/MetaPixel.js';
 import Lander, { LANDER_TYPES } from '../models/Lander.js';
 import FunnelTemplate, { FUNNEL_TYPES } from '../models/FunnelTemplate.js';
 import Domain from '../models/Domain.js';
@@ -169,6 +170,48 @@ const normalizeSource = async (body, existing = null) => {
 router.get('/integrations/config', (req, res) => {
   res.json({ googleSignIn: googleConfigured() });
 });
+
+/* ------------------------------------------------------------ meta pixels */
+
+/**
+ * A pixel is only useful with somewhere to send to and something to send with,
+ * so both are required. The keys behave like every other credential here:
+ * absent means "leave what is stored", an empty string clears it.
+ */
+const normalizeMetaPixel = async (body, existing = null) => {
+  if (!str(body.title)) throw badRequest('Title is required');
+  if (!str(body.pixelId)) throw badRequest('Pixel ID is required');
+
+  const secret = (key) =>
+    typeof body[key] === 'string' ? str(body[key], 512) : existing?.[key] || '';
+  body.apiKey = secret('apiKey');
+  body.dataQualityToken = secret('dataQualityToken');
+  if (!body.apiKey) throw badRequest('Conversions API key is required');
+
+  if (body.actionSource && !ACTION_SOURCES.includes(body.actionSource)) body.actionSource = 'store_tracking_url';
+  if (body.eventUrl && !isHttpUrl(body.eventUrl)) throw badRequest('Event URL must start with http:// or https://');
+
+  if (Array.isArray(body.conversionMatching)) {
+    body.conversionMatching = body.conversionMatching
+      .map((c) => ({ conversionType: str(c?.conversionType, 60), eventName: str(c?.eventName, 60) }))
+      .filter((c) => c.conversionType && c.eventName);
+  }
+  if (Array.isArray(body.payoutRules)) {
+    body.payoutRules = body.payoutRules
+      .map((c) => ({ conversionType: str(c?.conversionType, 60), value: Number(c?.value) || 0 }))
+      .filter((c) => c.conversionType);
+  }
+  // Counters belong to the sender, not to whoever is editing the form
+  delete body.eventsSent;
+  delete body.lastEventAt;
+  delete body.lastError;
+  return body;
+};
+
+router.use(
+  '/meta-pixels',
+  crudRouter(MetaPixel, { searchFields: ['title', 'pixelId'], beforeSave: normalizeMetaPixel, sanitize: sanitizeMetaPixel })
+);
 
 /* Catalog of prebuilt channels for "New from template" */
 router.get('/sources/catalog', (req, res) => {
