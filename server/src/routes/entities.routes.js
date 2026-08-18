@@ -174,15 +174,19 @@ router.get('/integrations/config', (req, res) => {
 
 /**
  * A pixel is only useful with somewhere to send to and something to send with,
- * so both are required. The keys behave like every other credential here:
- * absent means "leave what is stored", an empty string clears it.
+ * so both are required.
+ *
+ * Neither key is ever sent to the client, so the form necessarily posts an
+ * empty one back on every edit. On an existing pixel that has to mean "leave
+ * what is stored": reading it as "clear it" made the key required field fail
+ * validation on every edit, and would have quietly dropped a Data Quality
+ * token the moment anything else on the pixel was changed.
  */
 const normalizeMetaPixel = async (body, existing = null) => {
   if (!str(body.title)) throw badRequest('Title is required');
   if (!str(body.pixelId)) throw badRequest('Pixel ID is required');
 
-  const secret = (key) =>
-    typeof body[key] === 'string' ? str(body[key], 512) : existing?.[key] || '';
+  const secret = (key) => (typeof body[key] === 'string' ? str(body[key], 512) : '') || existing?.[key] || '';
   body.apiKey = secret('apiKey');
   body.dataQualityToken = secret('dataQualityToken');
   if (!body.apiKey) throw badRequest('Conversions API key is required');
