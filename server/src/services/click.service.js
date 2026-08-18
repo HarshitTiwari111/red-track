@@ -6,7 +6,7 @@ import { replaceMacros, buildMacroContext } from './macro.service.js';
 import { fireForwards } from './forward.service.js';
 import { lookupGeo, clientIp } from './geo.service.js';
 import { parseUa } from './ua.service.js';
-import { detectBot } from './bot.service.js';
+import { isBlockedIp, isBotUa } from './bot.service.js';
 import { markAndCheckUnique } from './uniques.service.js';
 import { incClick } from './stats.service.js';
 import { newClickId } from '../utils/ids.js';
@@ -120,7 +120,9 @@ export function buildClick(campaign, req, { entry = 'redirect' } = {}) {
   const settings = getSettingsSync();
   const now = new Date();
 
-  const botFlag = detectBot(ua, ip);
+  const blocked = isBlockedIp(ip);
+  const badUa = isBotUa(ua);
+  const botFlag = blocked || badUa;
   const pathIndex = selectPathIndex(campaign, {
     country: geo.country,
     device: uaParsed.device,
@@ -153,6 +155,7 @@ export function buildClick(campaign, req, { entry = 'redirect' } = {}) {
     landerId: lander?._id || null,
     offerId: offer?._id || null,
     botFlag,
+    botReason: blocked ? 'ip' : badUa ? 'ua' : '',
     isUnique,
     lpClick: false,
     source: source?.name || '',

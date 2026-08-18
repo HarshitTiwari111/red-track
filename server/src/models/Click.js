@@ -76,6 +76,12 @@ const clickSchema = new mongoose.Schema(
     offerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Offer', default: null },
     finalUrl: { type: String, default: '' },
     botFlag: { type: Boolean, default: false, index: true },
+    /**
+     * Why it was flagged. The flag alone cannot tell an operator whether to
+     * widen a blocklist or loosen a user-agent rule, which is the only reason
+     * anyone looks at it.
+     */
+    botReason: { type: String, enum: ['', 'ua', 'ip'], default: '' },
     isUnique: { type: Boolean, default: true },
     lpClick: { type: Boolean, default: false },
     converted: { type: Boolean, default: false },

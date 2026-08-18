@@ -4,7 +4,7 @@ import Conversion from '../models/Conversion.js';
 import { PostbackLog, ClickErrorLog } from '../models/Logs.js';
 import { asyncRoute } from '../middleware/error.js';
 import { updateConversionStatus, addManualConversions } from '../services/conversion.service.js';
-import { getCampaignById, getOffer, getNetworkById, getLander, getSource } from '../services/cache.service.js';
+import { getCampaignById, getOffer, getNetworkById, getLander, getSource, listOffers } from '../services/cache.service.js';
 import { clientIp } from '../services/geo.service.js';
 import { str, bool, toObjectId, isObjectId, badRequest, notFound } from '../utils/validate.js';
 import { parseRange } from '../utils/time.js';
@@ -13,13 +13,22 @@ import { scopeByCampaign, ownedCampaignIds, ownsDoc, isAdmin } from '../middlewa
 
 const router = express.Router();
 
-const decorate = (doc) => ({
-  ...doc,
-  campaignName: doc.campaignId ? getCampaignById(doc.campaignId)?.name || '' : '',
-  offerName: doc.offerId ? getOffer(doc.offerId)?.name || '' : '',
-  networkName: doc.networkId ? getNetworkById(doc.networkId)?.name || '' : '',
-  landerName: doc.landerId ? getLander(doc.landerId)?.name || '' : '',
-});
+const decorate = (doc) => {
+  const offer = doc.offerId ? getOffer(doc.offerId) : null;
+  /*
+   * A click has no offer source of its own - it inherits the one its offer
+   * belongs to. Reading doc.networkId, which clicks never carry, left the
+   * column permanently blank.
+   */
+  const networkId = doc.networkId || offer?.networkId || null;
+  return {
+    ...doc,
+    campaignName: doc.campaignId ? getCampaignById(doc.campaignId)?.name || '' : '',
+    offerName: offer?.name || '',
+    networkName: networkId ? getNetworkById(networkId)?.name || '' : '',
+    landerName: doc.landerId ? getLander(doc.landerId)?.name || '' : '',
+  };
+};
 
 /* ------------------------------------------------------------- clicks log */
 router.get(
@@ -32,6 +41,24 @@ router.get(
     if (req.query.device) q['uaParsed.device'] = str(req.query.device, 24).toLowerCase();
     if (req.query.clickid) q.clickid = str(req.query.clickid, 64);
     if (req.query.bot !== undefined && req.query.bot !== '') q.botFlag = bool(req.query.bot);
+
+    const offerId = toObjectId(req.query.offerId);
+    if (offerId) q.offerId = offerId;
+    /*
+     * The channel is stored on the click as a name, not an id - it is a snapshot
+     * taken when the click happened, so renaming a channel later cannot rewrite
+     * history. Filtering therefore matches that snapshot.
+     */
+    const sourceId = toObjectId(req.query.trafficSourceId);
+    if (sourceId) {
+      const name = getSource(sourceId)?.name;
+      q.source = name || '__none__';
+    }
+    // An offer source owns offers, so filtering by one means "any of its offers"
+    const networkId = toObjectId(req.query.networkId);
+    if (networkId) {
+      q.offerId = { $in: listOffers().filter((o) => String(o.networkId) === String(networkId)).map((o) => o._id) };
+    }
     if (req.query.from || req.query.to) {
       const tz = getSettingsSync().reportTimezone;
       const range = parseRange(req.query.from, req.query.to, tz);
