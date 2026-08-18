@@ -155,9 +155,8 @@ export default function CapiIntegrations() {
               <th>Title</th>
               <th>Date connected</th>
               <th>Pixel ID</th>
-              {/* The header carries `num` too, or it stays left while the
-                  figure under it is pushed to the right of a wide column. */}
-              <th className="num">Events sent</th>
+              {/* How many events reached this pixel belongs with the rest of
+                  its history, on the details page, not as a column here. */}
               <th>Details</th>
               <th>Actions</th>
             </tr>
@@ -165,14 +164,14 @@ export default function CapiIntegrations() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="table-empty">
+                <td colSpan={5} className="table-empty">
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && visible.length === 0 && (
               <tr>
-                <td colSpan={6} className="table-empty">
+                <td colSpan={5} className="table-empty">
                   No pixels yet — add one to start sending conversions to Meta.
                 </td>
               </tr>
@@ -194,7 +193,6 @@ export default function CapiIntegrations() {
                   </td>
                   <td className="nowrap">{dt(r.createdAt)}</td>
                   <td className="mono">{r.pixelId}</td>
-                  <td className="num">{r.eventsSent || 0}</td>
                   <td>
                     <button type="button" className="cell-link" onClick={() => navigate(`/capi/${r._id}`)}>
                       View details
