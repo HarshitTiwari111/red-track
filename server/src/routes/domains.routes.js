@@ -2,7 +2,7 @@ import express from 'express';
 import Domain from '../models/Domain.js';
 import config from '../config/env.js';
 import { asyncRoute } from '../middleware/error.js';
-import { refreshCache } from '../services/cache.service.js';
+import { publishConfigChange } from '../services/cache.service.js';
 import { refreshDomainSsl, parseCertificate } from '../services/ssl.service.js';
 import { verifyDomainDns } from '../services/dns.service.js';
 import { str, isObjectId, badRequest, notFound, isHttpUrl } from '../utils/validate.js';
@@ -164,7 +164,7 @@ router.post(
     const body = await normalize(req.body, null);
     const created = await Domain.create(body);
     await enforceSingleDefault(created);
-    await refreshCache();
+    await publishConfigChange();
     res.status(201).json(sanitize(created.toObject()));
   })
 );
@@ -192,7 +192,7 @@ router.put(
     Object.assign(existing, body);
     await existing.save();
     await enforceSingleDefault(existing);
-    await refreshCache();
+    await publishConfigChange();
     res.json(sanitize(existing.toObject()));
   })
 );
@@ -203,7 +203,7 @@ router.delete(
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
     const deleted = await Domain.findByIdAndDelete(req.params.id).lean();
     if (!deleted) throw notFound();
-    await refreshCache();
+    await publishConfigChange();
     res.json({ ok: true });
   })
 );

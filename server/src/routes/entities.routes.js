@@ -25,7 +25,7 @@ import Domain from '../models/Domain.js';
 import Campaign from '../models/Campaign.js';
 import config from '../config/env.js';
 import { asyncRoute } from '../middleware/error.js';
-import { refreshCache, getNetworkById } from '../services/cache.service.js';
+import { publishConfigChange, getNetworkById } from '../services/cache.service.js';
 import { refreshCaps, capUsage, capStatus } from '../services/caps.service.js';
 import { runReport } from '../services/report.service.js';
 import { getSettingsSync } from '../services/settings.service.js';
@@ -247,7 +247,7 @@ router.post(
 
     // Added as a set, because attaching twice would send the conversion twice
     await Model.updateOne({ _id: targetId }, { $addToSet: { capiPixelIds: req.params.id } });
-    await refreshCache();
+    await publishConfigChange();
     res.json({ ok: true });
   })
 );
@@ -265,7 +265,7 @@ router.delete(
     if (!ownsDoc(req, doc)) throw forbidden();
 
     await Model.updateOne({ _id: targetId }, { $pull: { capiPixelIds: id } });
-    await refreshCache();
+    await publishConfigChange();
     res.json({ ok: true });
   })
 );
@@ -291,7 +291,7 @@ router.post(
 
     body.ownerId = ownerOnCreate(req, {});
     const created = await TrafficSource.create(body);
-    await refreshCache();
+    await publishConfigChange();
     res.status(201).json(sanitizeSource(created.toObject()));
   })
 );
@@ -343,7 +343,7 @@ router.post(
     doc.integration.lastError = check.ok ? '' : check.error;
     doc.integration.lastCheckAt = new Date();
     await doc.save();
-    await refreshCache();
+    await publishConfigChange();
 
     res.json({ ok: check.ok, integration: sanitizeSource(doc.toObject()).integration });
   })
@@ -456,7 +456,7 @@ router.post(
       slug: slugify(`${name}-copy`),
       status: 'paused',
     });
-    await refreshCache();
+    await publishConfigChange();
     res.status(201).json(clone.toObject());
   })
 );
@@ -478,7 +478,7 @@ router.post(
       throw badRequest('Unknown bulk action');
     }
 
-    await refreshCache();
+    await publishConfigChange();
     res.json({ ok: true, matched: result.matchedCount ?? result.deletedCount ?? 0 });
   })
 );
@@ -560,7 +560,7 @@ router.post(
     );
 
     const created = await AffiliateNetwork.create(body);
-    await refreshCache();
+    await publishConfigChange();
     res.status(201).json(created.toObject());
   })
 );
@@ -656,7 +656,7 @@ router.post(
       postbackSecurityKey: newSecurityKey(),
       status: 'paused',
     });
-    await refreshCache();
+    await publishConfigChange();
     res.status(201).json(clone.toObject());
   })
 );
@@ -678,7 +678,7 @@ router.post(
       throw badRequest('Unknown bulk action');
     }
 
-    await refreshCache();
+    await publishConfigChange();
     res.json({ ok: true, matched: result.matchedCount ?? result.deletedCount ?? 0 });
   })
 );
@@ -696,7 +696,7 @@ router.post(
       { new: true }
     ).lean();
     if (!doc) throw notFound();
-    await refreshCache();
+    await publishConfigChange();
     res.json(doc);
   })
 );
@@ -729,7 +729,7 @@ const normalizeOffer = async (body, existing = null) => {
 };
 
 const afterOfferWrite = async () => {
-  await refreshCache();
+  await publishConfigChange();
   await refreshCaps();
 };
 
@@ -954,7 +954,7 @@ router.post(
     if (!ownsDoc(req, src)) throw forbidden();
     const { _id, createdAt, updatedAt, ...rest } = src;
     const clone = await Lander.create({ ...rest, name: `${src.name} (copy)`, status: 'paused', ownerId: ownerOnCreate(req, {}) });
-    await refreshCache();
+    await publishConfigChange();
     res.status(201).json(clone.toObject());
   })
 );
@@ -982,7 +982,7 @@ router.post(
       throw badRequest('Unknown bulk action');
     }
 
-    await refreshCache();
+    await publishConfigChange();
     res.json({ ok: true, matched: result.matchedCount ?? result.deletedCount ?? 0 });
   })
 );
@@ -1215,7 +1215,7 @@ router.post(
       slug: nextSlug,
       status: 'paused',
     });
-    await refreshCache();
+    await publishConfigChange();
     res.status(201).json(clone.toObject());
   })
 );
@@ -1243,7 +1243,7 @@ router.post(
       throw badRequest('Unknown bulk action');
     }
 
-    await refreshCache();
+    await publishConfigChange();
     res.json({ ok: true, matched: result.matchedCount ?? result.deletedCount ?? 0 });
   })
 );

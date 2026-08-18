@@ -2,7 +2,7 @@ import dns from 'node:dns';
 import Domain from '../models/Domain.js';
 import config from '../config/env.js';
 import logger from '../utils/logger.js';
-import { refreshCache } from './cache.service.js';
+import { publishConfigChange } from './cache.service.js';
 
 /**
  * DNS ownership check for tracking domains.
@@ -117,7 +117,7 @@ export async function verifyDomainDns(domain) {
 
   // The host guard reads domains from the cache, so a newly active domain
   // would keep 404ing for up to the refresh interval without this.
-  if (result.ok && domain.status === 'pending') await refreshCache();
+  if (result.ok && domain.status === 'pending') await publishConfigChange();
 
   return { domain: updated, result };
 }

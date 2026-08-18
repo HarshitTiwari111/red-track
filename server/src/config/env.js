@@ -94,6 +94,8 @@ export const config = {
   clickCookieMaxAge: 90 * 24 * 60 * 60 * 1000,
   // Campaign cache refresh interval on the hot path
   cacheRefreshMs: 30_000,
+  /* How often a worker checks whether another worker changed something. */
+  configWatchMs: 2_000,
 };
 
 export default config;

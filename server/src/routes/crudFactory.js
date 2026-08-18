@@ -1,6 +1,6 @@
 import express from 'express';
 import { asyncRoute } from '../middleware/error.js';
-import { refreshCache } from '../services/cache.service.js';
+import { publishConfigChange } from '../services/cache.service.js';
 import { isObjectId, sanitizeObject, badRequest, notFound, forbidden } from '../utils/validate.js';
 import { ownerFilter, ownerOnCreate, ownsDoc } from '../middleware/scope.js';
 
@@ -12,7 +12,7 @@ export function crudRouter(Model, options = {}) {
   const {
     searchFields = ['name'],
     beforeSave = async (body) => body,
-    afterWrite = async () => refreshCache(),
+    afterWrite = async () => publishConfigChange(),
     defaultSort = { createdAt: -1 },
     listProject = null,
     // Last step before a document goes out over the wire - the place to drop

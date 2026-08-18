@@ -4,13 +4,15 @@ import Lander from '../models/Lander.js';
 import TrafficSource from '../models/TrafficSource.js';
 import AffiliateNetwork from '../models/AffiliateNetwork.js';
 import Domain from '../models/Domain.js';
+import AppMeta from '../models/AppMeta.js';
 import config from '../config/env.js';
 import logger from '../utils/logger.js';
 
 /**
  * In-memory config cache. The click path reads ONLY from here - there is never a
- * DB read before a 302. Refreshed every 30s and immediately after any CRUD write
- * in this process (other cluster workers pick the change up on their next tick).
+ * DB read before a 302. Refreshed every 30s, immediately after a write in this
+ * process, and within a couple of seconds on the other cluster workers - see
+ * publishConfigChange below for how they are told.
  */
 const cache = {
   campaignsBySlug: new Map(),
@@ -60,18 +62,70 @@ export async function refreshCache() {
   return cache.refreshing;
 }
 
+/**
+ * Tell every worker that configuration changed.
+ *
+ * Refreshing here only fixes the worker that served the write; the others are
+ * still holding the old configuration. Bumping a shared counter is what lets
+ * them notice, and it costs one tiny write instead of any coordination.
+ */
+let seenVersion = -1;
+export async function publishConfigChange() {
+  await refreshCache();
+  try {
+    const doc = await AppMeta.findOneAndUpdate(
+      { _id: 'config' },
+      { $inc: { version: 1 }, $set: { at: new Date() } },
+      { upsert: true, new: true }
+    ).lean();
+    // This worker is already current, so it must not refresh again on the watch
+    seenVersion = doc?.version ?? seenVersion;
+  } catch (err) {
+    // The local refresh already happened; the others still catch up on their
+    // full tick, which is what used to happen every time.
+    logger.warn('config version bump failed:', err.message);
+  }
+}
+
 let timer = null;
+let watch = null;
 export function startCacheRefresh() {
   if (timer) return;
   timer = setInterval(() => {
     refreshCache();
   }, config.cacheRefreshMs);
   timer.unref?.();
+
+  /*
+   * A second, much faster timer that reads one number rather than the whole
+   * configuration. It is what turns "up to 30 seconds" into "a couple of
+   * seconds" for a change made on another worker, without putting a database
+   * read anywhere near the click path.
+   */
+  watch = setInterval(async () => {
+    try {
+      const doc = await AppMeta.findById('config', { version: 1 }).lean();
+      const v = doc?.version ?? 0;
+      if (seenVersion === -1) {
+        seenVersion = v;
+        return;
+      }
+      if (v !== seenVersion) {
+        seenVersion = v;
+        await refreshCache();
+      }
+    } catch {
+      /* the full refresh above is the backstop */
+    }
+  }, config.configWatchMs);
+  watch.unref?.();
 }
 
 export function stopCacheRefresh() {
   if (timer) clearInterval(timer);
+  if (watch) clearInterval(watch);
   timer = null;
+  watch = null;
 }
 
 export const getCampaignBySlug = (slug) => cache.campaignsBySlug.get(String(slug || '').toLowerCase());
