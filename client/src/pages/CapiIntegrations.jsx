@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LuPencil, LuTrash2 } from 'react-icons/lu';
 import { Page } from '../components/Layout.jsx';
+import useConfirm from '../components/ConfirmModal.jsx';
 import Field from '../components/Field.jsx';
 import MetaPixelModal, { blankMetaPixel, metaPixelToForm } from '../components/MetaPixelModal.jsx';
 import { api, errMsg } from '../api/client.js';
@@ -18,6 +19,7 @@ const dt = (v) =>
     : '—';
 
 export default function CapiIntegrations() {
+  const [confirm, confirmUI] = useConfirm();
   const navigate = useNavigate();
   const [draft, setDraft] = useState({ title: '', pixelId: '' });
   const [filters, setFilters] = useState(draft);
@@ -72,6 +74,12 @@ export default function CapiIntegrations() {
   };
 
   const remove = async (row) => {
+    const ok = await confirm({
+      title: `Delete ${row.title}?`,
+      message: 'This cannot be undone.',
+      note: 'Any traffic channel or offer sending to this pixel stops sending.',
+    });
+    if (!ok) return;
     try {
       await api.delete(`/meta-pixels/${row._id}`);
       setNotice(`Removed ${row.title}.`);
@@ -237,6 +245,7 @@ export default function CapiIntegrations() {
         />
       )}
 
+      {confirmUI}
     </Page>
   );
 }

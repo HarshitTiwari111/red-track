@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Page } from '../components/Layout.jsx';
+import useConfirm from '../components/ConfirmModal.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/Field.jsx';
 import CampaignModal, { blankCampaign, campaignToForm } from '../components/CampaignModal.jsx';
@@ -128,6 +129,7 @@ function totalValue(totals, key) {
 }
 
 export default function Campaigns() {
+  const [confirm, confirmUI] = useConfirm();
   const navigate = useNavigate();
   // The Traffic Channels page links here with ?trafficSourceId=… ("Report")
   const [searchParams] = useSearchParams();
@@ -321,8 +323,14 @@ export default function Campaigns() {
     }
   };
 
-  const removeSelected = () => {
-    if (!window.confirm(`Delete ${selectedIds.length} campaign(s)? Recorded clicks and stats are kept.`)) return;
+  const removeSelected = async () => {
+    const n = selectedIds.length;
+    const ok = await confirm({
+      title: `Delete ${n} campaign${n === 1 ? '' : 's'}?`,
+      message: 'This cannot be undone.',
+      note: 'Recorded clicks and stats are kept.',
+    });
+    if (!ok) return;
     bulk({ action: 'delete' }, `${selectedIds.length} campaign(s) deleted.`);
   };
 
@@ -807,6 +815,7 @@ export default function Campaigns() {
           </Field>
         </Modal>
       )}
+      {confirmUI}
     </Page>
   );
 }

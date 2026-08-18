@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Page } from '../components/Layout.jsx';
+import useConfirm from '../components/ConfirmModal.jsx';
 import CopyField from '../components/CopyField.jsx';
 import DomainModal, { blankDomain, domainToForm } from '../components/DomainModal.jsx';
 import { api, errMsg } from '../api/client.js';
@@ -81,6 +82,7 @@ function dnsCell(row) {
 }
 
 export default function Domains() {
+  const [confirm, confirmUI] = useConfirm();
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({ defaultBaseUrl: '', defaultHost: '', targetCname: '' });
   const [loading, setLoading] = useState(true);
@@ -170,8 +172,13 @@ export default function Domains() {
   };
 
   const remove = async () => {
-    if (!window.confirm(`Delete ${selectedIds.length} domain(s)? Existing tracking links on them stop resolving.`))
-      return;
+    const n = selectedIds.length;
+    const ok = await confirm({
+      title: `Delete ${n} domain${n === 1 ? '' : 's'}?`,
+      message: 'This cannot be undone.',
+      note: 'Tracking links already using them stop working straight away.',
+    });
+    if (!ok) return;
     try {
       await Promise.all(selectedIds.map((id) => api.delete(`/domains/${id}`)));
       setNotice(`${selectedIds.length} domain(s) deleted.`);
@@ -520,6 +527,7 @@ export default function Domains() {
           error={formError}
         />
       )}
+      {confirmUI}
     </Page>
   );
 }

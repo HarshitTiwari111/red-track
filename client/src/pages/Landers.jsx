@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Page } from '../components/Layout.jsx';
+import useConfirm from '../components/ConfirmModal.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/Field.jsx';
 import LanderModal, { blankLander, landerToForm, LANDER_TYPES } from '../components/LanderModal.jsx';
@@ -125,6 +126,7 @@ function totalValue(totals, key) {
 }
 
 export default function Landers() {
+  const [confirm, confirmUI] = useConfirm();
   const [draft, setDraft] = useState({ from: todayKey(), to: todayKey(), title: '', tags: '', type: 'all' });
   const [filters, setFilters] = useState(draft);
 
@@ -288,8 +290,14 @@ export default function Landers() {
     }
   };
 
-  const removeSelected = () => {
-    if (!window.confirm(`Delete ${selectedIds.length} lander(s)? Recorded clicks and stats are kept.`)) return;
+  const removeSelected = async () => {
+    const n = selectedIds.length;
+    const ok = await confirm({
+      title: `Delete ${n} lander${n === 1 ? '' : 's'}?`,
+      message: 'This cannot be undone.',
+      note: 'Recorded clicks and stats are kept.',
+    });
+    if (!ok) return;
     bulk({ action: 'delete' }, `${selectedIds.length} lander(s) deleted.`);
   };
 
@@ -689,6 +697,7 @@ export default function Landers() {
           </Field>
         </Modal>
       )}
+      {confirmUI}
     </Page>
   );
 }

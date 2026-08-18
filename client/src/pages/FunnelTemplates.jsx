@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Page } from '../components/Layout.jsx';
+import useConfirm from '../components/ConfirmModal.jsx';
 import Field from '../components/Field.jsx';
 import FunnelModal, { blankFunnel, funnelToForm, FUNNEL_TYPES } from '../components/FunnelModal.jsx';
 import { landersApi, offersApi, api, errMsg } from '../api/client.js';
@@ -9,6 +10,7 @@ const DENSITIES = ['compact', 'standard', 'comfortable'];
 const typeLabel = (id) => FUNNEL_TYPES.find((t) => t.id === id)?.label || id;
 
 export default function FunnelTemplates() {
+  const [confirm, confirmUI] = useConfirm();
   const [title, setTitle] = useState('');
   const [applied, setApplied] = useState('');
 
@@ -117,8 +119,13 @@ export default function FunnelTemplates() {
   };
 
   const removeSelected = async () => {
-    if (!window.confirm(`Delete ${selectedIds.length} funnel template(s)? Campaigns already built from them are not affected.`))
-      return;
+    const n = selectedIds.length;
+    const ok = await confirm({
+      title: `Delete ${n} funnel template${n === 1 ? '' : 's'}?`,
+      message: 'This cannot be undone.',
+      note: 'Campaigns already built from them keep working — a template is copied in, not linked.',
+    });
+    if (!ok) return;
     try {
       await api.post('/funnels/bulk', { ids: selectedIds, action: 'delete' });
       setNotice(`${selectedIds.length} template(s) deleted.`);
@@ -378,6 +385,7 @@ export default function FunnelTemplates() {
           error={formError}
         />
       )}
+      {confirmUI}
     </Page>
   );
 }

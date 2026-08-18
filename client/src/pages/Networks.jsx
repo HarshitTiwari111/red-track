@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page } from '../components/Layout.jsx';
+import useConfirm from '../components/ConfirmModal.jsx';
 import Field from '../components/Field.jsx';
 import NetworkModal, { blankNetwork, networkToForm } from '../components/NetworkModal.jsx';
 import NetworkCatalogModal from '../components/NetworkCatalogModal.jsx';
@@ -107,6 +108,7 @@ function totalValue(totals, key) {
 }
 
 export default function Networks() {
+  const [confirm, confirmUI] = useConfirm();
   const navigate = useNavigate();
 
   const [draft, setDraft] = useState({ from: todayKey(), to: todayKey(), title: '', status: 'all' });
@@ -260,8 +262,14 @@ export default function Networks() {
     }
   };
 
-  const removeSelected = () => {
-    if (!window.confirm(`Delete ${selectedIds.length} offer source(s)? Recorded conversions are kept.`)) return;
+  const removeSelected = async () => {
+    const n = selectedIds.length;
+    const ok = await confirm({
+      title: `Delete ${n} offer source${n === 1 ? '' : 's'}?`,
+      message: 'This cannot be undone.',
+      note: 'Recorded conversions are kept.',
+    });
+    if (!ok) return;
     bulk({ action: 'delete' }, `${selectedIds.length} offer source(s) deleted.`);
   };
 
@@ -615,6 +623,7 @@ export default function Networks() {
           error={formError}
         />
       )}
+      {confirmUI}
     </Page>
   );
 }

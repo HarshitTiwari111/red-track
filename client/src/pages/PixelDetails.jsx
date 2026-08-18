@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { LuTrash2 } from 'react-icons/lu';
 import { SiMeta } from 'react-icons/si';
 import { Page } from '../components/Layout.jsx';
+import useConfirm from '../components/ConfirmModal.jsx';
 import Field from '../components/Field.jsx';
 import Modal from '../components/Modal.jsx';
 import { api, errMsg } from '../api/client.js';
@@ -15,6 +16,7 @@ const TABS = [
 const dt = (v) => (v ? new Date(v).toLocaleString() : '—');
 
 export default function PixelDetails() {
+  const [confirm, confirmUI] = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -58,6 +60,13 @@ export default function PixelDetails() {
   );
 
   const detach = async (row) => {
+    const ok = await confirm({
+      title: `Stop sending ${row.name} to this pixel?`,
+      message: 'Conversions from it will no longer reach Meta.',
+      note: 'Nothing is deleted — you can attach it again at any time.',
+      confirmLabel: 'Detach',
+    });
+    if (!ok) return;
     try {
       await api.delete(`/meta-pixels/${id}/links/${tab}/${row._id}`);
       setNotice(`${row.name} no longer sends to this pixel.`);
@@ -213,6 +222,7 @@ export default function PixelDetails() {
           }}
         />
       )}
+      {confirmUI}
     </Page>
   );
 }

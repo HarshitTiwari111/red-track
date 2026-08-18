@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page } from '../components/Layout.jsx';
+import useConfirm from '../components/ConfirmModal.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/Field.jsx';
 import DataTable from '../components/DataTable.jsx';
@@ -122,6 +123,7 @@ function totalValue(totals, key) {
 }
 
 export default function Offers() {
+  const [confirm, confirmUI] = useConfirm();
   const navigate = useNavigate();
 
   const [draft, setDraft] = useState({
@@ -307,8 +309,14 @@ export default function Offers() {
     }
   };
 
-  const removeSelected = () => {
-    if (!window.confirm(`Delete ${selectedIds.length} offer(s)? Recorded clicks and stats are kept.`)) return;
+  const removeSelected = async () => {
+    const n = selectedIds.length;
+    const ok = await confirm({
+      title: `Delete ${n} offer${n === 1 ? '' : 's'}?`,
+      message: 'This cannot be undone.',
+      note: 'Recorded clicks and stats are kept.',
+    });
+    if (!ok) return;
     bulk({ action: 'delete' }, `${selectedIds.length} offer(s) deleted.`);
   };
 
@@ -795,6 +803,7 @@ export default function Offers() {
           />
         </Modal>
       )}
+      {confirmUI}
     </Page>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page } from '../components/Layout.jsx';
+import useConfirm from '../components/ConfirmModal.jsx';
 import Field from '../components/Field.jsx';
 import SourceModal, {
   blankSource,
@@ -104,6 +105,7 @@ function totalValue(totals, key) {
 }
 
 export default function Sources() {
+  const [confirm, confirmUI] = useConfirm();
   const navigate = useNavigate();
 
   const [draft, setDraft] = useState({
@@ -311,8 +313,14 @@ export default function Sources() {
     }
   };
 
-  const removeSelected = () => {
-    if (!window.confirm(`Delete ${selectedIds.length} channel(s)? Recorded clicks and stats are kept.`)) return;
+  const removeSelected = async () => {
+    const n = selectedIds.length;
+    const ok = await confirm({
+      title: `Delete ${n} traffic channel${n === 1 ? '' : 's'}?`,
+      message: 'This cannot be undone.',
+      note: 'Recorded clicks and stats are kept.',
+    });
+    if (!ok) return;
     bulk({ action: 'delete' }, `${selectedIds.length} channel(s) deleted.`);
   };
 
@@ -690,6 +698,7 @@ export default function Sources() {
           error={formError}
         />
       )}
+      {confirmUI}
     </Page>
   );
 }

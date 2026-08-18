@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Page } from '../components/Layout.jsx';
+import useConfirm from '../components/ConfirmModal.jsx';
 import DataTable from '../components/DataTable.jsx';
 import Modal from '../components/Modal.jsx';
 import CopyField from '../components/CopyField.jsx';
@@ -21,6 +22,7 @@ const TIMEZONES = [
 ];
 
 export default function Settings() {
+  const [confirm, confirmUI] = useConfirm();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
@@ -108,7 +110,12 @@ export default function Settings() {
   };
 
   const removeUser = async (u) => {
-    if (!window.confirm(`Delete user ${u.email}?`)) return;
+    const ok = await confirm({
+      title: `Delete ${u.email}?`,
+      message: 'They lose access immediately.',
+      note: 'Records they created stay where they are.',
+    });
+    if (!ok) return;
     try {
       await settingsApi.deleteUser(u._id);
       load();
@@ -364,6 +371,7 @@ export default function Settings() {
           <CopyField label="Tracker base URL" value={window.location.origin} />
         </Modal>
       )}
+      {confirmUI}
     </Page>
   );
 }
