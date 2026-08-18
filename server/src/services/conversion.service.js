@@ -36,6 +36,43 @@ export function logPostback(doc) {
 }
 
 /**
+ * Mirror a conversion to whichever Meta pixels are set on the channel that
+ * bought the click or the offer that paid for it.
+ *
+ * A rejected conversion is not sent. The network refused it, so it is not a
+ * sale - reporting it would train the ad platform on money that never arrived,
+ * and `effective()` above already counts it as nothing here.
+ *
+ * The tracker's conversion id goes out as the event id, so Meta collapses this
+ * with the browser pixel's event for the same conversion - and with an earlier
+ * copy of this same conversion, which is what makes it safe to send again when
+ * a pending one is later approved.
+ *
+ * Never awaited: the conversion is already saved and the network is owed a fast
+ * answer, so a slow Graph API must not hold the response open.
+ */
+function sendToMeta({ conversion, click, channel, offer, url, status, payout, type }) {
+  if (status === 'rejected') return;
+
+  const pixelIds = [...new Set([...(channel?.capiPixelIds || []), ...(offer?.capiPixelIds || [])].map(String))];
+  if (!pixelIds.length) return;
+
+  forwardConversionToMeta(pixelIds, {
+    eventId: String(conversion._id),
+    eventName: type,
+    time: conversion.ts,
+    value: payout,
+    // The payout is the offer's money, so its currency is the offer's too
+    currency: offer?.currency || channel?.currency || 'USD',
+    url: str(url, 2048),
+    ip: click.ip || '',
+    userAgent: click.ua || '',
+    fbclid: click.fbclid || '',
+    clickTime: click.ts,
+  }).catch((e) => logger.warn('meta capi forward failed:', e.message));
+}
+
+/**
  * Core postback/pixel handler. Always resolves - callers respond 200 regardless
  * so a network never sees an error and retries forever.
  * @returns {{ok:boolean, reason?:string, conversion?:object, duplicate?:boolean, updated?:boolean}}
@@ -201,6 +238,24 @@ export async function recordConversion({
         revenueDelta: after.rev - before.rev,
       });
 
+      /*
+       * A conversion that has just become countable has to reach Meta too - it
+       * was held back while it was rejected, or nothing was sent at all if the
+       * first postback said so. The event id is the conversion's, so a copy
+       * that did go out earlier is collapsed rather than counted twice.
+       */
+      const upCampaign = click.campaignId ? getCampaignById(click.campaignId) : null;
+      sendToMeta({
+        conversion: existing,
+        click,
+        channel: upCampaign?.trafficSourceId ? getSource(upCampaign.trafficSourceId) : null,
+        offer,
+        url,
+        status: finalStatus,
+        payout: existing.payout,
+        type: existing.type,
+      });
+
       log({
         ok: true,
         reason: `status updated -> ${finalStatus}`,
@@ -285,35 +340,16 @@ export async function recordConversion({
     );
   }
 
-  /*
-   * Mirror the conversion to Meta's Conversions API. Deliberately not awaited:
-   * the conversion is already saved and the caller owes the network a fast 200,
-   * so a slow or unhappy Graph API must not hold the response open.
-   */
-  /*
-   * Pixels can be set on the channel that bought the click and on the offer
-   * that paid for it. The same pixel configured in both places must still
-   * receive one event, so they are merged by pixel id first - and Meta would
-   * count a repeat anyway, since every copy carries the same event id.
-   */
-  const pixelIds = [...new Set([...(channel?.capiPixelIds || []), ...(offer?.capiPixelIds || [])].map(String))];
-
-  if (pixelIds.length) {
-    forwardConversionToMeta(pixelIds, {
-      // Meta collapses this with the browser pixel event of the same id, so a
-      // site running both the pixel and this postback is not counted twice.
-      eventId: String(created._id),
-      eventName: finalType,
-      time: created.ts,
-      value: finalPayout,
-      currency: channel?.currency || 'USD',
-      url: str(url, 2048),
-      ip: click.ip || '',
-      userAgent: click.ua || '',
-      fbclid: click.fbclid || '',
-      clickTime: click.ts,
-    }).catch((e) => logger.warn('meta capi forward failed:', e.message));
-  }
+  sendToMeta({
+    conversion: created,
+    click,
+    channel,
+    offer,
+    url,
+    status: finalStatus,
+    payout: finalPayout,
+    type: finalType,
+  });
 
   log({ ok: true, reason: 'conversion recorded', clickid: cid, networkId });
   return { ok: true, conversion: created.toObject() };
