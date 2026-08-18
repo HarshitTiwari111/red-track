@@ -1279,7 +1279,8 @@ router.get(
     res.json({
       campaignUrl: query ? `${base}?${query}` : base,
       bareUrl: base,
-      goUrl: `${origin}/go?clickid={clickid}`,
+      // /go still answers, but /click is the name every screen shows
+      goUrl: `${origin}/click?clickid={clickid}`,
       pixelUrl: `${origin}/pixel.gif?clickid={clickid}&payout={payout}&type=lead`,
       scriptTag: `<script src="${origin}/track.js" data-kcmp="${campaign.slug}"></script>`,
       origin,

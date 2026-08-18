@@ -213,7 +213,7 @@ export default function CampaignModal({
       case 'noredirect':
         return `<script src="${origin}/track.js" data-kcmp="${value.slug}"></script>`;
       case 'lander':
-        return `${origin}/go?clickid={clickid}`;
+        return `${origin}/click?clickid={clickid}`;
       case 'pixel':
         return `${origin}/pixel.gif?clickid={clickid}&payout={payout}&type=lead`;
       default:

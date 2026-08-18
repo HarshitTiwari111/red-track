@@ -348,7 +348,7 @@ router.post('/api/v1/track/pageview', openCors, (req, res) => {
       clickid: click.clickid,
       campaign: campaign.slug,
       offerId: offer?._id ? String(offer._id) : null,
-      goUrl: `${config.baseUrl}/go?clickid=${encodeURIComponent(click.clickid)}`,
+      goUrl: `${config.baseUrl}/click?clickid=${encodeURIComponent(click.clickid)}`,
     });
 
     persistClick(click);
