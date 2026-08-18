@@ -1,8 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LuCircleHelp, LuInfo, LuPlus, LuTrash2 } from 'react-icons/lu';
 import { SiMeta } from 'react-icons/si';
 import Modal from './Modal.jsx';
 import Field, { Switch } from './Field.jsx';
+import { api } from '../api/client.js';
+
+/**
+ * Meta's standard events. Only these are scored for Event Match Quality, so the
+ * field is a list rather than free text - a typo would send a custom event that
+ * silently never appears in the ad account's optimisation.
+ */
+const META_EVENTS = [
+  'Purchase', 'Lead', 'Contact', 'CompleteRegistration', 'SubmitApplication', 'Subscribe',
+  'StartTrial', 'AddToCart', 'AddToWishlist', 'AddPaymentInfo', 'InitiateCheckout',
+  'ViewContent', 'Search', 'Schedule', 'FindLocation', 'CustomizeProduct', 'Donate',
+];
 
 /** Meta's action_source values. The first is the tracker's own default. */
 const ACTION_SOURCES = [
@@ -46,6 +58,15 @@ export const metaPixelToForm = (p) => ({
 
 export default function MetaPixelModal({ value, onChange, onClose, onSave, saving, error }) {
   const [showPayout, setShowPayout] = useState((value.payoutRules || []).length > 0);
+  const [conversionTypes, setConversionTypes] = useState([]);
+
+  // The conversion types this install records, offered as suggestions below.
+  useEffect(() => {
+    api
+      .get('/settings')
+      .then(({ data }) => setConversionTypes((data.conversionTypes || []).map((t) => t.name).filter(Boolean)))
+      .catch(() => setConversionTypes([]));
+  }, []);
 
   const set = (patch) => onChange({ ...value, ...patch });
 
@@ -256,7 +277,14 @@ export default function MetaPixelModal({ value, onChange, onClose, onSave, savin
       <div style={{ margin: '18px 0 4px' }}>
         <Switch
           checked={value.customConversionMatching}
-          onChange={(v) => set({ customConversionMatching: v })}
+          onChange={(v) =>
+            // Switching it on with nothing to fill in reads as a dead end, so the
+            // first empty rule comes with it.
+            set({
+              customConversionMatching: v,
+              conversionMatching: v && matches.length === 0 ? [{ conversionType: '', eventName: '' }] : matches,
+            })
+          }
           label="Custom Conversion Matching"
         />
       </div>
@@ -270,21 +298,26 @@ export default function MetaPixelModal({ value, onChange, onClose, onSave, savin
             </div>
             {matches.map((m, i) => (
               <div className="cm-row cm3" key={i}>
-                <Field label="Conversion type">
+                <Field label={`Conversion Type ${i + 1}`}>
+                  {/* A list of the types this tracker records, with room for one
+                      the settings do not name yet. */}
                   <input
                     type="text"
+                    list="kap-conversion-types"
                     value={m.conversionType}
                     onChange={(e) => setMatch(i, { conversionType: e.target.value })}
-                    placeholder="sale"
+                    placeholder="conversion"
                   />
                 </Field>
-                <Field label="Meta event name">
-                  <input
-                    type="text"
-                    value={m.eventName}
-                    onChange={(e) => setMatch(i, { eventName: e.target.value })}
-                    placeholder="Purchase"
-                  />
+                <Field label={`Event Name ${i + 1}`}>
+                  <select value={m.eventName} onChange={(e) => setMatch(i, { eventName: e.target.value })}>
+                    <option value="">Select an event</option>
+                    {META_EVENTS.map((e) => (
+                      <option key={e} value={e}>
+                        {e}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
                 <div className="cm-tail">
                   <button
@@ -298,13 +331,22 @@ export default function MetaPixelModal({ value, onChange, onClose, onSave, savin
                 </div>
               </div>
             ))}
+            <datalist id="kap-conversion-types">
+              {conversionTypes.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
             <button
               type="button"
               className="link-plain"
               onClick={() => set({ conversionMatching: [...matches, { conversionType: '', eventName: '' }] })}
             >
-              + Add rule
+              + Add More
             </button>
+            <div className="rt-hint">
+              Meta scores Event Match Quality per event name, so a rule here is what makes the EMQ
+              score on the list available.
+            </div>
           </div>
         </div>
       )}

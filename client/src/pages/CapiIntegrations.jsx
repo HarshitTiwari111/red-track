@@ -4,6 +4,7 @@ import { LuPencil, LuTrash2 } from 'react-icons/lu';
 import { Page } from '../components/Layout.jsx';
 import useConfirm from '../components/ConfirmModal.jsx';
 import Field from '../components/Field.jsx';
+import Modal from '../components/Modal.jsx';
 import MetaPixelModal, { blankMetaPixel, metaPixelToForm } from '../components/MetaPixelModal.jsx';
 import { api, errMsg } from '../api/client.js';
 
@@ -18,9 +19,28 @@ const dt = (v) =>
       })
     : '—';
 
+/**
+ * What Meta needs before it will report a score. Kept in the same order as the
+ * steps an operator takes, because the panel doubles as the instructions.
+ */
+const emqMissing = (p) => {
+  const out = [];
+  if (!p?.dataQualityToken && !p?.hasDataQualityToken) out.push('Set the Data Quality API token');
+  if (!p?.customConversionMatching) out.push('Switch on Custom Conversion Matching');
+  if (!(p?.conversionMatching || []).some((m) => m.conversionType && m.eventName)) {
+    out.push('Choose a conversion type and event name');
+  }
+  return out;
+};
+const emqReady = (p) => emqMissing(p).length === 0;
+const EMQ_STEPS =
+  'To view your EMQ score: open Edit pixel, set the Data Quality API token, ' +
+  'switch on Custom Conversion Matching, then choose a conversion type and event name.';
+
 export default function CapiIntegrations() {
   const [confirm, confirmUI] = useConfirm();
   const navigate = useNavigate();
+  const [emqFor, setEmqFor] = useState(null);
   const [draft, setDraft] = useState({ title: '', pixelId: '' });
   const [filters, setFilters] = useState(draft);
 
@@ -70,6 +90,16 @@ export default function CapiIntegrations() {
       setFormError(errMsg(err, 'Could not save the pixel'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const loadEmq = async (row) => {
+    setEmqFor({ row, loading: true });
+    try {
+      const { data } = await api.get(`/meta-pixels/${row._id}/emq`);
+      setEmqFor({ row, ...data });
+    } catch (err) {
+      setEmqFor({ row, error: errMsg(err, 'Could not read the score from Meta') });
     }
   };
 
@@ -157,21 +187,22 @@ export default function CapiIntegrations() {
               <th>Pixel ID</th>
               {/* How many events reached this pixel belongs with the rest of
                   its history, on the details page, not as a column here. */}
-              <th>Details</th>
+              <th>View details</th>
+              <th>EMQ score</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={5} className="table-empty">
+                <td colSpan={6} className="table-empty">
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && visible.length === 0 && (
               <tr>
-                <td colSpan={5} className="table-empty">
+                <td colSpan={6} className="table-empty">
                   No pixels yet — add one to start sending conversions to Meta.
                 </td>
               </tr>
@@ -196,6 +227,22 @@ export default function CapiIntegrations() {
                   <td>
                     <button type="button" className="cell-link" onClick={() => navigate(`/capi/${r._id}`)}>
                       View details
+                    </button>
+                  </td>
+                  <td>
+                    {/*
+                      Meta only scores an event it has been told to look at, so the
+                      link stays inert until the pixel carries the token and the
+                      rule that make a score possible. The title spells out what is
+                      still missing rather than leaving a dead link.
+                    */}
+                    <button
+                      type="button"
+                      className={emqReady(r) ? 'cell-link' : 'cell-link muted'}
+                      title={emqReady(r) ? 'Read the score from Meta' : EMQ_STEPS}
+                      onClick={() => (emqReady(r) ? loadEmq(r) : setEmqFor({ row: r, missing: emqMissing(r) }))}
+                    >
+                      View EMQ Score
                     </button>
                   </td>
                   <td>
@@ -241,6 +288,81 @@ export default function CapiIntegrations() {
           saving={saving}
           error={formError}
         />
+      )}
+
+      {emqFor && (
+        <Modal
+          title={`EMQ score — ${emqFor.row.title}`}
+          onClose={() => setEmqFor(null)}
+          footer={
+            <>
+              {!emqReady(emqFor.row) && (
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => {
+                    setEmqFor(null);
+                    setFormError('');
+                    setEditing(metaPixelToForm(emqFor.row));
+                  }}
+                >
+                  Edit pixel
+                </button>
+              )}
+              <button type="button" className="btn" onClick={() => setEmqFor(null)}>
+                Close
+              </button>
+            </>
+          }
+        >
+          {emqFor.loading && <div className="mute">Reading the score from Meta…</div>}
+
+          {(emqFor.missing || []).length > 0 && (
+            <>
+              <div className="form-note">To view your EMQ score, finish these steps:</div>
+              <ol className="rt-steps">
+                {emqFor.missing.map((s) => (
+                  <li key={s}>{s}</li>
+                ))}
+              </ol>
+              <div className="rt-hint" style={{ marginTop: 0 }}>
+                Meta scores how well the data you send identifies a real person. It only reports that
+                for an event it has been told to watch, which is what the conversion-matching rule
+                names.
+              </div>
+            </>
+          )}
+
+          {emqFor.error && <div className="alert error">{emqFor.error}</div>}
+
+          {emqFor.ok && (
+            <table className="data density-standard">
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th className="num">Score</th>
+                  <th>Matched on</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(emqFor.events || []).length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="table-empty">
+                      Meta has no score yet — it needs a few events to have arrived first.
+                    </td>
+                  </tr>
+                )}
+                {(emqFor.events || []).map((e) => (
+                  <tr key={e.eventName}>
+                    <td>{e.eventName}</td>
+                    <td className="num">{e.score ?? '—'}</td>
+                    <td className="mute">{(e.matchedFields || []).join(', ') || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Modal>
       )}
 
       {confirmUI}

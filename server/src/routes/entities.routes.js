@@ -8,7 +8,7 @@ import TrafficSource, {
   sanitizeSource,
 } from '../models/TrafficSource.js';
 import { catalogSummary, getCatalogEntry } from '../services/sourceCatalog.service.js';
-import { verifyMetaAccount } from '../services/meta.service.js';
+import { verifyMetaAccount, fetchEmqScore } from '../services/meta.service.js';
 import {
   buildAuthUrl,
   googleConfigured,
@@ -206,6 +206,19 @@ const normalizeMetaPixel = async (body, existing = null) => {
   delete body.lastError;
   return body;
 };
+
+/**
+ * Event Match Quality for one pixel. Declared before the CRUD router below, or
+ * that router would claim the path as an id and answer 404.
+ */
+router.get(
+  '/meta-pixels/:id/emq',
+  asyncRoute(async (req, res) => {
+    const pixel = await MetaPixel.findOne({ _id: req.params.id, ...ownerFilter(req) }).lean();
+    if (!pixel) throw notFound('Pixel not found');
+    res.json(await fetchEmqScore(pixel));
+  })
+);
 
 router.use(
   '/meta-pixels',

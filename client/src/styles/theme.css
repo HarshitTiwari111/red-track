@@ -3324,3 +3324,23 @@ tr.pb-detail td {
   overflow-y: auto;
   min-width: 210px;
 }
+
+/*
+ * A cell link that is not usable yet. It stays clickable - pressing it explains
+ * what is missing - but reads as inactive so nobody expects a number from it.
+ */
+.cell-link.muted {
+  color: var(--text-muted);
+}
+.cell-link.muted:hover {
+  color: var(--text-muted);
+  text-decoration: underline dotted;
+}
+
+/* Numbered steps inside a panel that doubles as instructions. */
+.rt-steps {
+  margin: 10px 0 14px;
+  padding-left: 22px;
+  line-height: 1.9;
+  font-size: 13px;
+}

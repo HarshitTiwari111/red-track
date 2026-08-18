@@ -166,3 +166,49 @@ export async function forwardConversionToMeta(pixelIds, conversion) {
     })
   );
 }
+
+/**
+ * Everything Meta needs before it will report an Event Match Quality score, and
+ * what is still missing. The UI greys the link out until this says ready, so the
+ * reasons are worded as the steps an operator still has to take.
+ */
+export function emqReadiness(pixel) {
+  const missing = [];
+  if (!pixel?.dataQualityToken) missing.push('Set the Data Quality API token');
+  if (!pixel?.customConversionMatching) missing.push('Switch on Custom Conversion Matching');
+  const rules = (pixel?.conversionMatching || []).filter((m) => m.conversionType && m.eventName);
+  if (!rules.length) missing.push('Choose a conversion type and event name');
+  return { ready: missing.length === 0, missing };
+}
+
+/**
+ * Event Match Quality for one pixel, read with its Data Quality token.
+ *
+ * EMQ is scored per event name, which is why a conversion-matching rule has to
+ * exist first: without one there is no event whose quality Meta could report.
+ */
+export async function fetchEmqScore(pixel) {
+  const { ready, missing } = emqReadiness(pixel);
+  if (!ready) return { ok: false, notReady: true, missing };
+
+  const events = [...new Set((pixel.conversionMatching || []).map((m) => m.eventName).filter(Boolean))];
+  const res = await call(
+    `${GRAPH}/${encodeURIComponent(pixel.pixelId)}/event_match_quality` +
+      `?event_names=${encodeURIComponent(JSON.stringify(events))}` +
+      `&access_token=${encodeURIComponent(pixel.dataQualityToken)}`
+  );
+
+  if (!res.ok) return { ok: false, error: res.error };
+
+  /*
+   * Meta returns one entry per event name. The shape has changed between API
+   * versions, so read the score from whichever field carries it rather than
+   * insisting on one name.
+   */
+  const rows = (res.body?.data || []).map((d) => ({
+    eventName: d.event_name || d.event || '',
+    score: d.event_match_quality_score ?? d.score ?? d.emq_score ?? null,
+    matchedFields: d.matched_fields || d.user_data_fields || [],
+  }));
+  return { ok: true, events: rows, raw: res.body };
+}
