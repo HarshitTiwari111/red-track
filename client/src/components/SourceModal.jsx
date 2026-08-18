@@ -14,6 +14,7 @@ import { SiGoogle, SiMeta } from 'react-icons/si';
 import Modal from './Modal.jsx';
 import Field from './Field.jsx';
 import CopyField from './CopyField.jsx';
+import CapiPixelPicker from './CapiPixelPicker.jsx';
 import { api } from '../api/client.js';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'AUD', 'CAD', 'BRL', 'RUB'];
@@ -144,7 +145,7 @@ export const blankSource = () => ({
   costUpdateFrequency: 5,
   params: padParams([]),
   integration: blankIntegration(),
-  capiPixels: [],
+  capiPixelIds: [],
   conversionMatching: [],
   cm360: [],
   status: 'active',
@@ -164,7 +165,7 @@ export const sourceToForm = (s) => {
     ...s,
     currency: s.currency || 'USD',
     integration: { ...blankIntegration(), ...(s.integration || {}) },
-    capiPixels: s.capiPixels || [],
+    capiPixelIds: s.capiPixelIds || [],
     conversionMatching: s.conversionMatching || [],
     cm360: s.cm360 || [],
     params: padParams(s.params?.length ? s.params : fromTokens),
@@ -193,7 +194,6 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
   const [googleSignIn, setGoogleSignIn] = useState(true);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState(null);
-  const [editingPixel, setEditingPixel] = useState(null);
   const origin = window.location.origin;
 
   useEffect(() => {
@@ -235,18 +235,6 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
   const addCm = () =>
     set({ cm360: [...cm, { conversionType: '', profileId: '', floodlightActivityId: '' }] });
 
-  const pixels = value.capiPixels || [];
-  const setPixels = (next) => set({ capiPixels: next });
-  const setPixel = (i, patch) =>
-    setPixels(pixels.map((p, x) => (x === i ? { ...p, ...patch } : p)));
-  const addPixel = () => {
-    setPixels([
-      ...pixels,
-      { platform: 'meta', label: '', pixelId: '', accessToken: '', testEventCode: '', enabled: true },
-    ]);
-    // A new pixel is useless without its token, so open it straight away
-    setEditingPixel(pixels.length);
-  };
 
   /**
    * Save, then ask the server to call the platform.
@@ -860,105 +848,11 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
             </div>
           </div>
 
-          <div className="rt-card">
-            <div className="rt-card-head">
-              <span className="head-title">
-                <SiMeta className="brand-mark-meta" />
-                CAPI Meta settings
-                <LuCircleHelp
-                  className="head-help"
-                  title="Every conversion on this channel is also sent to these pixels through Meta's Conversions API."
-                />
-              </span>
-            </div>
-            <div className="rt-card-body">
-              {pixels.map((p, i) => (
-                <div className="capi-row" key={i}>
-                  <Field label="Select platform">
-                    <select value="meta" disabled>
-                      <option value="meta">Meta</option>
-                    </select>
-                  </Field>
-                  <Field label="Select Pixel">
-                    <input
-                      type="text"
-                      className="mono"
-                      value={p.pixelId}
-                      onChange={(e) => setPixel(i, { pixelId: e.target.value })}
-                      placeholder="None"
-                    />
-                  </Field>
-                  <button
-                    type="button"
-                    className="head-icon-btn"
-                    onClick={() => setEditingPixel(editingPixel === i ? null : i)}
-                    title={editingPixel === i ? 'Done' : 'Edit this pixel'}
-                  >
-                    <LuPencil />
-                  </button>
-                  <button
-                    type="button"
-                    className="head-icon-btn danger"
-                    onClick={() => {
-                      setEditingPixel(null);
-                      setPixels(pixels.filter((_, x) => x !== i));
-                    }}
-                    title="Remove this pixel"
-                  >
-                    <LuTrash2 />
-                  </button>
-
-                  {editingPixel === i && (
-                    <div className="capi-detail">
-                      <div className="field-row">
-                        <Field label="Label">
-                          <input
-                            type="text"
-                            value={p.label || ''}
-                            onChange={(e) => setPixel(i, { label: e.target.value })}
-                            placeholder="Main pixel"
-                          />
-                        </Field>
-                        <Field label="Conversions API token">
-                          <input
-                            type="password"
-                            className="mono"
-                            autoComplete="new-password"
-                            value={p.accessToken || ''}
-                            onChange={(e) => setPixel(i, { accessToken: e.target.value })}
-                            placeholder={p.hasToken ? '••••••••••••' : 'EAAG…'}
-                          />
-                        </Field>
-                        <Field label="Test event code">
-                          <input
-                            type="text"
-                            className="mono"
-                            value={p.testEventCode || ''}
-                            onChange={(e) => setPixel(i, { testEventCode: e.target.value })}
-                            placeholder="TEST12345"
-                          />
-                        </Field>
-                      </div>
-                      <label className="switch">
-                        <input
-                          type="checkbox"
-                          checked={p.enabled !== false}
-                          onChange={(e) => setPixel(i, { enabled: e.target.checked })}
-                        />
-                        <span className="track" />
-                        Enabled
-                      </label>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              <button type="button" className="link-btn" onClick={addPixel}>
-                <LuPlus />
-                Add Pixel
-              </button>
-            </div>
-          </div>
+          <CapiPixelPicker
+            value={value.capiPixelIds || []}
+            onChange={(ids) => set({ capiPixelIds: ids })}
+            scope="source"
+          />
         </>
       )}
     </Modal>

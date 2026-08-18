@@ -164,6 +164,13 @@ const trafficSourceSchema = new mongoose.Schema(
     costUpdateFrequency: { type: Number, enum: COST_FREQUENCIES, default: 5 },
 
     integration: { type: integrationSchema, default: () => ({}) },
+    /**
+     * Pixels this channel sends conversions to, by reference. The pixel itself
+     * lives in one list under CAPI Integrations, so a key rotates in one place
+     * rather than in every channel that uses it.
+     */
+    capiPixelIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MetaPixel' }],
+    // Superseded by capiPixelIds; kept so a migration can read it once
     capiPixels: { type: [capiPixelSchema], default: [] },
     conversionMatching: { type: [conversionMatchSchema], default: [] },
     cm360: { type: [cm360Schema], default: [] },

@@ -11,6 +11,8 @@
  * return value and the caller logs it.
  */
 
+import MetaPixel from '../models/MetaPixel.js';
+
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const TIMEOUT_MS = 6000;
 
@@ -90,7 +92,7 @@ export async function sendCapiEvent(pixel, conversion) {
         event_time: Math.floor(new Date(conversion.time || Date.now()).getTime() / 1000),
         event_id: conversion.eventId || undefined,
         event_source_url: conversion.url || undefined,
-        action_source: 'website',
+        action_source: conversion.actionSource === 'store_tracking_url' ? 'website' : conversion.actionSource || 'website',
         user_data: userData,
         custom_data: {
           value: Number(conversion.value) || 0,
@@ -118,11 +120,49 @@ export async function sendCapiEvent(pixel, conversion) {
 }
 
 /**
- * Fan a conversion out to every pixel configured on its traffic channel.
- * Failures are logged, never raised - the conversion is already recorded.
+ * Send a conversion to a set of pixels, and record on each what happened.
+ *
+ * The counters are the only honest answer to "is this working" - Meta scores
+ * the quality, but whether an event left here at all is ours to report, so a
+ * pixel that has never sent one says 0 rather than looking configured and idle.
+ *
+ * Failures are recorded, never raised: the conversion is already saved and the
+ * network is owed a fast answer.
  */
-export async function forwardConversionToMeta(source, conversion) {
-  const pixels = (source?.capiPixels || []).filter((p) => p.enabled !== false && p.pixelId && p.accessToken);
-  if (!pixels.length) return [];
-  return Promise.all(pixels.map((p) => sendCapiEvent(p, conversion).catch((e) => ({ ok: false, error: e.message }))));
+export async function forwardConversionToMeta(pixelIds, conversion) {
+  const ids = (Array.isArray(pixelIds) ? pixelIds : []).map(String);
+  if (!ids.length) return [];
+
+  const pixels = await MetaPixel.find({ _id: { $in: ids }, status: 'active' }).lean();
+
+  return Promise.all(
+    pixels.map(async (pixel) => {
+      // A rule for this conversion type wins over the event name the postback
+      // used, which is rarely what an ad account optimises on.
+      const rule = pixel.customConversionMatching
+        ? (pixel.conversionMatching || []).find((m) => m.conversionType === conversion.eventName)
+        : null;
+      const payoutRule = (pixel.payoutRules || []).find((r) => r.conversionType === conversion.eventName);
+
+      const res = await sendCapiEvent(
+        { pixelId: pixel.pixelId, accessToken: pixel.apiKey, testEventCode: pixel.testEventCode },
+        {
+          ...conversion,
+          eventName: rule?.eventName || conversion.eventName || pixel.defaultEventName || 'Purchase',
+          value: payoutRule ? payoutRule.value : conversion.value,
+          url: conversion.url || pixel.eventUrl || '',
+          actionSource: pixel.actionSource,
+        }
+      ).catch((e) => ({ ok: false, error: e.message }));
+
+      await MetaPixel.updateOne(
+        { _id: pixel._id },
+        res.ok
+          ? { $inc: { eventsSent: 1 }, $set: { lastEventAt: new Date(), lastError: '' } }
+          : { $set: { lastEventAt: new Date(), lastError: String(res.error || 'unknown error').slice(0, 300) } }
+      ).catch(() => {});
+
+      return res;
+    })
+  );
 }

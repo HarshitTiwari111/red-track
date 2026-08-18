@@ -3,6 +3,7 @@ import { LuCircleHelp, LuPencil, LuPlus, LuTrash2 } from 'react-icons/lu';
 import { SiMeta } from 'react-icons/si';
 import Modal from './Modal.jsx';
 import Field, { Switch, ChipList } from './Field.jsx';
+import CapiPixelPicker from './CapiPixelPicker.jsx';
 
 const TABS = [
   { id: 'main', label: 'Main' },
@@ -35,7 +36,7 @@ export const blankOffer = () => ({
   tags: [],
   status: 'active',
   notes: '',
-  capiPixels: [],
+  capiPixelIds: [],
   caps: {
     uniqueVisits: 0,
     clickCap: 0,
@@ -53,13 +54,12 @@ export const offerToForm = (o) => ({
   networkId: o.networkId || '',
   geo: o.geo || [],
   tags: o.tags || [],
-  capiPixels: o.capiPixels || [],
+  capiPixelIds: o.capiPixelIds || [],
   caps: { ...blankOffer().caps, ...(o.caps || {}) },
 });
 
 export default function OfferModal({ value, networks, knownTags = [], onChange, onClose, onSave, saving, error }) {
   const [tab, setTab] = useState('main');
-  const [editingPixel, setEditingPixel] = useState(null);
   const [advanced, setAdvanced] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
   const [geoDraft, setGeoDraft] = useState('');
@@ -67,19 +67,6 @@ export default function OfferModal({ value, networks, knownTags = [], onChange, 
 
   const set = (patch) => onChange({ ...value, ...patch });
 
-  const pixels = value.capiPixels || [];
-  const setPixel = (i, patch) =>
-    set({ capiPixels: pixels.map((p, x) => (x === i ? { ...p, ...patch } : p)) });
-  const addPixel = () => {
-    set({
-      capiPixels: [
-        ...pixels,
-        { platform: 'meta', label: '', pixelId: '', accessToken: '', testEventCode: '', enabled: true },
-      ],
-    });
-    // A new pixel is useless without its token, so open it straight away
-    setEditingPixel(pixels.length);
-  };
   const setCaps = (patch) => onChange({ ...value, caps: { ...value.caps, ...patch } });
 
   const network = networks.find((n) => String(n._id) === String(value.networkId));
@@ -421,119 +408,11 @@ export default function OfferModal({ value, networks, knownTags = [], onChange, 
 
       {/* -------------------------------------------------------- POSTBACK */}
       {tab === 'capi' && (
-        <>
-          <div className="rt-card">
-            <div className="rt-card-head">
-              <span className="head-title">
-                <SiMeta className="brand-mark-meta" />
-                CAPI Meta settings
-                <LuCircleHelp
-                  className="head-help"
-                  title="Every conversion recorded on this offer is also sent to these pixels through Meta's Conversions API."
-                />
-              </span>
-            </div>
-            <div className="rt-card-body">
-              <div className="rt-hint" style={{ marginTop: 0 }}>
-                The tracker sends its own conversion id as the event id, so a site that also fires the
-                browser pixel is not counted twice. A pixel set here and on the traffic channel still
-                receives one event.
-              </div>
-
-              {pixels.length === 0 && (
-                <div className="dim" style={{ fontSize: 13, padding: '8px 0' }}>
-                  No pixel configured — conversions on this offer stay in the tracker only.
-                </div>
-              )}
-
-              {pixels.map((p, i) => (
-                <div className="capi-row" key={i}>
-                  <Field label="Select platform">
-                    <select value="meta" disabled>
-                      <option value="meta">Meta</option>
-                    </select>
-                  </Field>
-                  <Field label="Select Pixel">
-                    <input
-                      type="text"
-                      className="mono"
-                      value={p.pixelId}
-                      onChange={(e) => setPixel(i, { pixelId: e.target.value })}
-                      placeholder="None"
-                    />
-                  </Field>
-                  <button
-                    type="button"
-                    className="head-icon-btn"
-                    onClick={() => setEditingPixel(editingPixel === i ? null : i)}
-                    title={editingPixel === i ? 'Done' : 'Edit this pixel'}
-                  >
-                    <LuPencil />
-                  </button>
-                  <button
-                    type="button"
-                    className="head-icon-btn danger"
-                    onClick={() => {
-                      setEditingPixel(null);
-                      set({ capiPixels: pixels.filter((_, x) => x !== i) });
-                    }}
-                    title="Remove this pixel"
-                  >
-                    <LuTrash2 />
-                  </button>
-
-                  {editingPixel === i && (
-                    <div className="capi-detail">
-                      <div className="field-row">
-                        <Field label="Label">
-                          <input
-                            type="text"
-                            value={p.label || ''}
-                            onChange={(e) => setPixel(i, { label: e.target.value })}
-                            placeholder="Main pixel"
-                          />
-                        </Field>
-                        <Field label="Conversions API token">
-                          <input
-                            type="password"
-                            className="mono"
-                            autoComplete="new-password"
-                            value={p.accessToken || ''}
-                            onChange={(e) => setPixel(i, { accessToken: e.target.value })}
-                            placeholder={p.hasToken ? '••••••••••••' : 'EAAG…'}
-                          />
-                        </Field>
-                        <Field label="Test event code">
-                          <input
-                            type="text"
-                            className="mono"
-                            value={p.testEventCode || ''}
-                            onChange={(e) => setPixel(i, { testEventCode: e.target.value })}
-                            placeholder="TEST12345"
-                          />
-                        </Field>
-                      </div>
-                      <label className="switch">
-                        <input
-                          type="checkbox"
-                          checked={p.enabled !== false}
-                          onChange={(e) => setPixel(i, { enabled: e.target.checked })}
-                        />
-                        <span className="track" />
-                        Enabled
-                      </label>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              <button type="button" className="link-btn" onClick={addPixel}>
-                <LuPlus />
-                Add Pixel
-              </button>
-            </div>
-          </div>
-        </>
+        <CapiPixelPicker
+          value={value.capiPixelIds || []}
+          onChange={(ids) => set({ capiPixelIds: ids })}
+          scope="offer"
+        />
       )}
     </Modal>
   );

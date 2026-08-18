@@ -18,7 +18,6 @@ import {
 import AffiliateNetwork, { POSTBACK_ROLES, DUPLICATE_MODES } from '../models/AffiliateNetwork.js';
 import { networkCatalogSummary, getNetworkTemplate } from '../services/networkCatalog.service.js';
 import Offer, { sanitizeOffer } from '../models/Offer.js';
-import { normalizeCapiPixels } from '../models/capiPixel.js';
 import MetaPixel, { ACTION_SOURCES, sanitizeMetaPixel } from '../models/MetaPixel.js';
 import Lander, { LANDER_TYPES } from '../models/Lander.js';
 import FunnelTemplate, { FUNNEL_TYPES } from '../models/FunnelTemplate.js';
@@ -120,8 +119,8 @@ const normalizeSource = async (body, existing = null) => {
       .filter((c) => c.conversionType && c.profileId && c.floodlightActivityId);
   }
 
-  if (Array.isArray(body.capiPixels)) {
-    body.capiPixels = normalizeCapiPixels(body.capiPixels, existing?.capiPixels || []);
+  if (Array.isArray(body.capiPixelIds)) {
+    body.capiPixelIds = [...new Set(body.capiPixelIds.filter(isObjectId).map(String))];
   }
 
   if (Array.isArray(body.params)) {
@@ -211,6 +210,64 @@ const normalizeMetaPixel = async (body, existing = null) => {
 router.use(
   '/meta-pixels',
   crudRouter(MetaPixel, { searchFields: ['title', 'pixelId'], beforeSave: normalizeMetaPixel, sanitize: sanitizeMetaPixel })
+);
+
+/**
+ * What a pixel is attached to. The relation is stored on the channel and the
+ * offer, so this reads it back from there rather than keeping a second copy
+ * that could disagree with the first.
+ */
+router.get(
+  '/meta-pixels/:id/links',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const q = { capiPixelIds: req.params.id, ...ownerFilter(req) };
+    const [sources, offers] = await Promise.all([
+      TrafficSource.find(q, { name: 1, createdAt: 1 }).lean(),
+      Offer.find(q, { name: 1, createdAt: 1 }).lean(),
+    ]);
+    res.json({ sources, offers });
+  })
+);
+
+/** Attach the pixel to one channel or one offer. */
+router.post(
+  '/meta-pixels/:id/links',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const kind = str(req.body?.kind, 10);
+    const targetId = str(req.body?.targetId, 40);
+    if (!['source', 'offer'].includes(kind)) throw badRequest('kind must be source or offer');
+    if (!isObjectId(targetId)) throw badRequest('Invalid target');
+
+    const Model = kind === 'source' ? TrafficSource : Offer;
+    const doc = await Model.findById(targetId);
+    if (!doc) throw notFound();
+    if (!ownsDoc(req, doc)) throw forbidden();
+
+    // Added as a set, because attaching twice would send the conversion twice
+    await Model.updateOne({ _id: targetId }, { $addToSet: { capiPixelIds: req.params.id } });
+    await refreshCache();
+    res.json({ ok: true });
+  })
+);
+
+router.delete(
+  '/meta-pixels/:id/links/:kind/:targetId',
+  asyncRoute(async (req, res) => {
+    const { id, kind, targetId } = req.params;
+    if (!isObjectId(id) || !isObjectId(targetId)) throw badRequest('Invalid id');
+    if (!['source', 'offer'].includes(kind)) throw badRequest('kind must be source or offer');
+
+    const Model = kind === 'source' ? TrafficSource : Offer;
+    const doc = await Model.findById(targetId);
+    if (!doc) throw notFound();
+    if (!ownsDoc(req, doc)) throw forbidden();
+
+    await Model.updateOne({ _id: targetId }, { $pull: { capiPixelIds: id } });
+    await refreshCache();
+    res.json({ ok: true });
+  })
 );
 
 /* Catalog of prebuilt channels for "New from template" */
@@ -653,8 +710,8 @@ const normalizeOffer = async (body, existing = null) => {
   if (Array.isArray(body.tags)) {
     body.tags = [...new Set(body.tags.map((t) => str(t, 40)).filter(Boolean))];
   }
-  if (Array.isArray(body.capiPixels)) {
-    body.capiPixels = normalizeCapiPixels(body.capiPixels, existing?.capiPixels || []);
+  if (Array.isArray(body.capiPixelIds)) {
+    body.capiPixelIds = [...new Set(body.capiPixelIds.filter(isObjectId).map(String))];
   }
   if (body.caps) {
     const c = body.caps;

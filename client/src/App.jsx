@@ -19,6 +19,7 @@ import Postbacks from './pages/Postbacks.jsx';
 import ConversionsLog from './pages/ConversionsLog.jsx';
 import ConversionTracking from './pages/ConversionTracking.jsx';
 import CapiIntegrations from './pages/CapiIntegrations.jsx';
+import PixelDetails from './pages/PixelDetails.jsx';
 import Settings from './pages/Settings.jsx';
 import Domains from './pages/Domains.jsx';
 import FunnelTemplates from './pages/FunnelTemplates.jsx';
@@ -64,6 +65,7 @@ export default function App() {
               <Route path="/postbacks" element={<Postbacks />} />
               <Route path="/conversion-tracking" element={<ConversionTracking />} />
               <Route path="/capi" element={<CapiIntegrations />} />
+              <Route path="/capi/:id" element={<PixelDetails />} />
               <Route path="/funnels" element={<FunnelTemplates />} />
               <Route path="/domains" element={<Domains />} />
               <Route path="/settings" element={<Settings />} />

@@ -296,12 +296,10 @@ export async function recordConversion({
    * receive one event, so they are merged by pixel id first - and Meta would
    * count a repeat anyway, since every copy carries the same event id.
    */
-  const pixels = [...(channel?.capiPixels || []), ...(offer?.capiPixels || [])].filter(
-    (p, i, all) => all.findIndex((x) => x.pixelId === p.pixelId) === i
-  );
+  const pixelIds = [...new Set([...(channel?.capiPixelIds || []), ...(offer?.capiPixelIds || [])].map(String))];
 
-  if (pixels.length) {
-    forwardConversionToMeta({ capiPixels: pixels }, {
+  if (pixelIds.length) {
+    forwardConversionToMeta(pixelIds, {
       // Meta collapses this with the browser pixel event of the same id, so a
       // site running both the pixel and this postback is not counted twice.
       eventId: String(created._id),

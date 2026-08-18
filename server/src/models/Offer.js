@@ -47,6 +47,13 @@ const offerSchema = new mongoose.Schema(
      * well as on the traffic channel because an offer is the other place a
      * person thinks about a conversion - what was actually sold.
      */
+    /**
+     * Pixels this offer sends conversions to, by reference. The pixel itself
+     * lives in one list under CAPI Integrations, so a key rotates in one place
+     * rather than in every offer that uses it.
+     */
+    capiPixelIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MetaPixel' }],
+    // Superseded by capiPixelIds; kept so a migration can read it once
     capiPixels: { type: [capiPixelSchema], default: [] },
     caps: { type: capsSchema, default: () => ({}) },
     status: { type: String, enum: ['active', 'paused'], default: 'active' },
