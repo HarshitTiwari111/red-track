@@ -3381,37 +3381,27 @@ tr.pb-detail td {
  * browser's own title tooltip, which renders as one long unreadable line and
  * cannot carry the steps as a list.
  */
-.emq-cell {
-  position: relative;
-  display: inline-block;
-}
+/*
+ * The EMQ hint. Drawn on the body with fixed coordinates, because the table
+ * scrolls its own overflow and would otherwise clip it against the last row.
+ */
 .emq-tip {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 40;
+  position: fixed;
+  z-index: 120;
   width: 268px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-radius: 6px;
   background: #3c3c3c;
   color: #fff;
   font-size: 11.5px;
-  line-height: 1.75;
+  line-height: 1.8;
   font-weight: 600;
-  box-shadow: 0 6px 18px rgb(0 0 0 / 28%);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s ease;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 32%);
   pointer-events: none;
 }
-.emq-cell:hover .emq-tip,
-.emq-cell:focus-within .emq-tip {
-  opacity: 1;
-  visibility: visible;
-}
 .emq-tip ul {
-  margin: 2px 0 0;
-  padding-left: 14px;
+  margin: 4px 0 0;
+  padding-left: 16px;
 }
 .emq-tip li {
   list-style: disc;

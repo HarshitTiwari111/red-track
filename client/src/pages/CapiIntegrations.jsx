@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { LuPencil, LuTrash2 } from 'react-icons/lu';
 import { Page } from '../components/Layout.jsx';
@@ -34,10 +35,30 @@ const emqMissing = (p) => {
 };
 const emqReady = (p) => emqMissing(p).length === 0;
 
+/** Size of the hint panel, needed to place it before it is drawn. */
+const TIP_W = 268;
+const TIP_H = 150;
+
 export default function CapiIntegrations() {
   const [confirm, confirmUI] = useConfirm();
   const navigate = useNavigate();
   const [emqFor, setEmqFor] = useState(null);
+  const [tip, setTip] = useState(null);
+
+  /*
+   * The hint is drawn on the body rather than inside the cell: the table scrolls
+   * its own overflow, which would clip a panel hanging below the last rows.
+   * Fixed coordinates come off the link, and it flips above when the space under
+   * it is too short.
+   */
+  const showTip = (el) => {
+    const r = el.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom;
+    setTip({
+      left: Math.max(8, Math.min(r.right - TIP_W, window.innerWidth - TIP_W - 8)),
+      ...(below < TIP_H ? { bottom: window.innerHeight - r.top + 8 } : { top: r.bottom + 8 }),
+    });
+  };
   const [draft, setDraft] = useState({ title: '', pixelId: '' });
   const [filters, setFilters] = useState(draft);
 
@@ -233,26 +254,17 @@ export default function CapiIntegrations() {
                       rule that make a score possible. Hovering it lists the steps
                       still outstanding rather than leaving a dead link.
                     */}
-                    <span className="emq-cell">
-                      <button
-                        type="button"
-                        className={emqReady(r) ? 'cell-link' : 'cell-link muted'}
-                        onClick={() => (emqReady(r) ? loadEmq(r) : setEmqFor({ row: r, missing: emqMissing(r) }))}
-                      >
-                        View EMQ Score
-                      </button>
-                      {!emqReady(r) && (
-                        <span className="emq-tip">
-                          To view your EMQ score, follow these steps:
-                          <ul>
-                            <li>Click on &apos;Edit pixel&apos; icon,</li>
-                            <li>Set Data Quality API token,</li>
-                            <li>Switch on custom conversion matching,</li>
-                            <li>Choose conversion type and event name.</li>
-                          </ul>
-                        </span>
-                      )}
-                    </span>
+                    <button
+                      type="button"
+                      className={emqReady(r) ? 'cell-link' : 'cell-link muted'}
+                      onClick={() => (emqReady(r) ? loadEmq(r) : setEmqFor({ row: r, missing: emqMissing(r) }))}
+                      onMouseEnter={(e) => !emqReady(r) && showTip(e.currentTarget)}
+                      onMouseLeave={() => setTip(null)}
+                      onFocus={(e) => !emqReady(r) && showTip(e.currentTarget)}
+                      onBlur={() => setTip(null)}
+                    >
+                      View EMQ Score
+                    </button>
                   </td>
                   <td>
                     <div className="row-actions">
@@ -373,6 +385,20 @@ export default function CapiIntegrations() {
           )}
         </Modal>
       )}
+
+      {tip &&
+        createPortal(
+          <div className="emq-tip" style={tip}>
+            To view your EMQ score, follow these steps:
+            <ul>
+              <li>Click on &apos;Edit pixel&apos; icon,</li>
+              <li>Set Data Quality API token,</li>
+              <li>Switch on custom conversion matching,</li>
+              <li>Choose conversion type and event name.</li>
+            </ul>
+          </div>,
+          document.body
+        )}
 
       {confirmUI}
     </Page>
