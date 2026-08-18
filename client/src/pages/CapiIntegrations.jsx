@@ -354,7 +354,23 @@ export default function CapiIntegrations() {
             </>
           )}
 
-          {emqFor.error && <div className="alert error">{emqFor.error}</div>}
+          {emqFor.error && (
+            <>
+              <div className="alert error">{emqFor.error}</div>
+              {/*
+                Meta refusing to parse the token means the value is not a token
+                at all, which is a different problem from one that is expired or
+                lacks a permission - so say where the real one comes from.
+              */}
+              {/token/i.test(emqFor.error) && (
+                <div className="rt-hint" style={{ marginTop: 0 }}>
+                  That answer came from Meta, not from this tracker. The Data Quality API token on
+                  this pixel is not one Meta recognises — generate it in Events Manager, open your
+                  pixel, then Settings, and paste it into Edit pixel.
+                </div>
+              )}
+            </>
+          )}
 
           {emqFor.ok && (
             <table className="data density-standard">
