@@ -55,6 +55,13 @@ const conversionSchema = new mongoose.Schema(
     publisherRevenue: { type: Number, default: 0 },
     // How many further postbacks arrived for the same (network, txid)
     duplicateHits: { type: Number, default: 0 },
+    /**
+     * Which repeat this row is, when the offer source records every repeat as
+     * its own conversion. 0 is the original. It exists so the unique index
+     * below still holds without rewriting the transaction id the network sent -
+     * that id is what an operator reconciles against, so it stays verbatim.
+     */
+    dupeSeq: { type: Number, default: 0 },
 
     rawQuery: { type: mongoose.Schema.Types.Mixed, default: {} },
     source: { type: String, default: 'postback' }, // postback | pixel | manual
@@ -65,7 +72,7 @@ const conversionSchema = new mongoose.Schema(
 // Dedupe: one txid per network. The partial filter keeps blank txids out of the
 // index entirely, so conversions without a transaction id never collide.
 conversionSchema.index(
-  { networkId: 1, txid: 1 },
+  { networkId: 1, txid: 1, dupeSeq: 1 },
   { unique: true, partialFilterExpression: { txid: { $type: 'string', $gt: '' } } }
 );
 conversionSchema.index({ campaignId: 1, ts: -1 });

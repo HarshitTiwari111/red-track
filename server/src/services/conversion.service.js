@@ -190,7 +190,8 @@ export async function recordConversion({
   const defaultType = settings.conversionDefault?.name || 'conversion';
   const finalType = matched ? matched.name : declared.length ? defaultType : asked || defaultType;
 
-  let tx = str(txid, 128);
+  const tx = str(txid, 128);
+  let dupeSeq = 0;
 
   // --- dedupe / status update -------------------------------------------------
   // The matched event may override how repeats are treated for that event only
@@ -198,14 +199,14 @@ export async function recordConversion({
   const duplicateMode = matched && DUPLICATE_MODES.includes(matched.mode) ? matched.mode : networkMode;
 
   if (tx && networkId) {
-    const existing = await Conversion.findOne({ networkId, txid: tx });
+    const existing = await Conversion.findOne({ networkId, txid: tx, dupeSeq: 0 });
 
-    // "create" records every repeat as its own conversion. The txid is suffixed
-    // so the (network, txid) unique index still holds and the origin stays visible.
+    // "create" records every repeat as its own conversion. All of them keep the
+    // network's transaction id; only dupeSeq separates them, so the id stays
+    // reconcilable against the network's own report.
     if (existing && duplicateMode === 'create') {
-      const suffixed = `${tx}#${(existing.duplicateHits || 0) + 2}`;
+      dupeSeq = (existing.duplicateHits || 0) + 1;
       await Conversion.updateOne({ _id: existing._id }, { $inc: { duplicateHits: 1 } });
-      tx = suffixed;
     } else if (existing) {
       const before = effective(existing.status, existing.payout);
       const after = effective(finalStatus, finalPayout || existing.payout);
@@ -278,6 +279,7 @@ export async function recordConversion({
       type: finalType,
       payout: finalPayout,
       txid: tx,
+      dupeSeq,
       status: finalStatus,
       // click snapshot
       country: click.geo?.country || 'XX',

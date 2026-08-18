@@ -35,6 +35,18 @@ const MODELS = [
 
 const sameKey = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+/**
+ * Indexes a previous version declared under a key that no longer exists. The
+ * repair below only reconciles indexes whose key still matches something in the
+ * schema, so a renamed key would otherwise leave the old one enforcing a
+ * constraint nothing declares any more.
+ */
+const RETIRED = {
+  // Superseded by { networkId, txid, dupeSeq }, which lets an offer source keep
+  // the network's transaction id on every repeat instead of suffixing it.
+  Conversion: ['networkId_1_txid_1'],
+};
+
 const optionsDiffer = (existing, declared) => {
   const ttlA = existing.expireAfterSeconds;
   const ttlB = declared.expireAfterSeconds;
@@ -59,6 +71,16 @@ async function repairIndexes(model) {
     existing = await model.collection.indexes();
   } catch {
     return; // collection does not exist yet - nothing to repair
+  }
+
+  for (const name of RETIRED[model.modelName] || []) {
+    if (!existing.some((i) => i.name === name)) continue;
+    try {
+      await model.collection.dropIndex(name);
+      logger.info(`index ${model.modelName}.${name} dropped (retired)`);
+    } catch (err) {
+      logger.warn(`could not drop retired ${model.modelName}.${name}: ${err.message}`);
+    }
   }
 
   for (const idx of existing) {
