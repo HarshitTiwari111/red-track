@@ -174,9 +174,9 @@ export default function Domains() {
   const remove = async () => {
     const n = selectedIds.length;
     const ok = await confirm({
-      title: `Delete ${n} domain${n === 1 ? '' : 's'}?`,
-      message: 'This cannot be undone.',
-      note: 'Tracking links already using them stop working straight away.',
+      title: 'Confirm delete',
+      message: `Are you sure you want to delete ${n} domain${n === 1 ? '' : 's'}?`,
+      note: 'This cannot be undone. Tracking links already using them stop working straight away.',
     });
     if (!ok) return;
     try {

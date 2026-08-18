@@ -75,9 +75,9 @@ export default function CapiIntegrations() {
 
   const remove = async (row) => {
     const ok = await confirm({
-      title: `Delete ${row.title}?`,
-      message: 'This cannot be undone.',
-      note: 'Any traffic channel or offer sending to this pixel stops sending.',
+      title: 'Confirm delete',
+      message: `Are you sure you want to delete ${row.title}?`,
+      note: 'This cannot be undone. Any traffic channel or offer sending to this pixel stops sending.',
     });
     if (!ok) return;
     try {

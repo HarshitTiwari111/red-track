@@ -265,9 +265,9 @@ export default function Networks() {
   const removeSelected = async () => {
     const n = selectedIds.length;
     const ok = await confirm({
-      title: `Delete ${n} offer source${n === 1 ? '' : 's'}?`,
-      message: 'This cannot be undone.',
-      note: 'Recorded conversions are kept.',
+      title: 'Confirm delete',
+      message: `Are you sure you want to delete ${n} offer source${n === 1 ? '' : 's'}?`,
+      note: 'This cannot be undone. Recorded conversions are kept.',
     });
     if (!ok) return;
     bulk({ action: 'delete' }, `${selectedIds.length} offer source(s) deleted.`);

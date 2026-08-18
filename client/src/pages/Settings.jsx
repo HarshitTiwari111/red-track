@@ -111,9 +111,9 @@ export default function Settings() {
 
   const removeUser = async (u) => {
     const ok = await confirm({
-      title: `Delete ${u.email}?`,
-      message: 'They lose access immediately.',
-      note: 'Records they created stay where they are.',
+      title: 'Confirm delete',
+      message: `Are you sure you want to delete ${u.email}?`,
+      note: 'They lose access immediately. Records they created stay where they are.',
     });
     if (!ok) return;
     try {

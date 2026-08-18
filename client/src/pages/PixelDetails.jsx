@@ -61,9 +61,9 @@ export default function PixelDetails() {
 
   const detach = async (row) => {
     const ok = await confirm({
-      title: `Stop sending ${row.name} to this pixel?`,
-      message: 'Conversions from it will no longer reach Meta.',
-      note: 'Nothing is deleted — you can attach it again at any time.',
+      title: 'Confirm detach',
+      message: `Are you sure you want to detach ${row.name} from this pixel?`,
+      note: 'Conversions from it will no longer reach Meta. Nothing is deleted — you can attach it again at any time.',
       confirmLabel: 'Detach',
     });
     if (!ok) return;

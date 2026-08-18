@@ -293,9 +293,9 @@ export default function Landers() {
   const removeSelected = async () => {
     const n = selectedIds.length;
     const ok = await confirm({
-      title: `Delete ${n} lander${n === 1 ? '' : 's'}?`,
-      message: 'This cannot be undone.',
-      note: 'Recorded clicks and stats are kept.',
+      title: 'Confirm delete',
+      message: `Are you sure you want to delete ${n} lander${n === 1 ? '' : 's'}?`,
+      note: 'This cannot be undone. Recorded clicks and stats are kept.',
     });
     if (!ok) return;
     bulk({ action: 'delete' }, `${selectedIds.length} lander(s) deleted.`);

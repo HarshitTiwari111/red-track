@@ -316,9 +316,9 @@ export default function Sources() {
   const removeSelected = async () => {
     const n = selectedIds.length;
     const ok = await confirm({
-      title: `Delete ${n} traffic channel${n === 1 ? '' : 's'}?`,
-      message: 'This cannot be undone.',
-      note: 'Recorded clicks and stats are kept.',
+      title: 'Confirm delete',
+      message: `Are you sure you want to delete ${n} traffic channel${n === 1 ? '' : 's'}?`,
+      note: 'This cannot be undone. Recorded clicks and stats are kept.',
     });
     if (!ok) return;
     bulk({ action: 'delete' }, `${selectedIds.length} channel(s) deleted.`);

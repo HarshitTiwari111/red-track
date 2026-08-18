@@ -121,9 +121,9 @@ export default function FunnelTemplates() {
   const removeSelected = async () => {
     const n = selectedIds.length;
     const ok = await confirm({
-      title: `Delete ${n} funnel template${n === 1 ? '' : 's'}?`,
-      message: 'This cannot be undone.',
-      note: 'Campaigns already built from them keep working — a template is copied in, not linked.',
+      title: 'Confirm delete',
+      message: `Are you sure you want to delete ${n} funnel template${n === 1 ? '' : 's'}?`,
+      note: 'This cannot be undone. Campaigns already built from them keep working — a template is copied in, not linked.',
     });
     if (!ok) return;
     try {

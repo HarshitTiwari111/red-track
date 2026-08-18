@@ -32,7 +32,7 @@ export default function useConfirm() {
   const ui = state ? (
     <Modal
       small
-      title={state.title || 'Are you sure?'}
+      title={state.title || 'Confirm delete'}
       onClose={() => close(false)}
       footer={
         <>
@@ -48,7 +48,7 @@ export default function useConfirm() {
       <div className="confirm-body">
         <LuTriangleAlert className="confirm-icon" />
         <div>
-          <p style={{ margin: 0 }}>{state.message || 'This cannot be undone.'}</p>
+          <p style={{ margin: 0 }}>{state.message || 'Are you sure?'}</p>
           {/* What survives is worth saying: it is the difference between a
               pause and a panic. */}
           {state.note && <p className="dim" style={{ margin: '10px 0 0', fontSize: 13 }}>{state.note}</p>}
