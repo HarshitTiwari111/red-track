@@ -17,14 +17,24 @@ const bucketExpr = (field, tz) => ({
  * must be recomputed from ALL of its clicks - starting mid-hour would rewrite that
  * hour using only part of its traffic.
  *
- * NOTE: buckets in the window with no surviving raw data are deleted, so never run
- * this over a period whose raw clicks have already been pruned by the retention
- * job - it would wipe stats that are correct.
+ * Buckets in the window with no surviving raw data are deleted, so the window is
+ * capped to the retention period: past that cutoff the clicks are gone and the
+ * rollups are the only remaining record of them. A day of margin covers a cleanup
+ * run that lands while this one is working.
  */
 export async function reconcileStats({ hours = 2 } = {}) {
-  const tz = getSettingsSync().reportTimezone || 'Asia/Kolkata';
+  const settings = getSettingsSync();
+  const tz = settings.reportTimezone || 'Asia/Kolkata';
+
+  const retentionHours = Math.max(1, (Number(settings.rawClickRetentionDays) || 90) - 1) * 24;
+  const asked = Math.max(1, Number(hours) || 2);
+  const window = Math.min(asked, retentionHours);
+  if (window < asked) {
+    logger.info(`reconcile: window trimmed ${asked}h -> ${window}h, to stay inside click retention`);
+  }
+
   const end = new Date();
-  const startBucket = localHourBucket(new Date(end.getTime() - hours * 3600 * 1000), tz);
+  const startBucket = localHourBucket(new Date(end.getTime() - window * 3600 * 1000), tz);
   const start = localToUtc(startBucket, tz);
 
   const clickAgg = await Click.aggregate([
@@ -148,7 +158,7 @@ export async function reconcileStats({ hours = 2 } = {}) {
   }));
 
   await StatsHourly.bulkWrite(ops, { ordered: false });
-  logger.info(`reconcile: rebuilt ${ops.length} hourly buckets (last ${hours}h)`);
+  logger.info(`reconcile: rebuilt ${ops.length} hourly buckets (last ${window}h)`);
   return { buckets: ops.length, dropped: stale.length };
 }
 

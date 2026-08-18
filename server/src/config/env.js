@@ -96,6 +96,13 @@ export const config = {
   cacheRefreshMs: 30_000,
   /* How often a worker checks whether another worker changed something. */
   configWatchMs: 2_000,
+  /**
+   * How far back the nightly stats rebuild reaches. The hourly pass only covers
+   * the last couple of hours, so a rollup that went wrong earlier - a counter
+   * added after the fact, a write lost to a database hiccup - would otherwise
+   * stay wrong forever while the raw clicks say something else.
+   */
+  reconcileDeepDays: Number(process.env.RECONCILE_DEEP_DAYS) || 14,
 };
 
 export default config;

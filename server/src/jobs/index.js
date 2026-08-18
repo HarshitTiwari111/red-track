@@ -6,6 +6,7 @@ import { refreshAllDomainSsl } from '../services/ssl.service.js';
 import { verifyPendingDomains } from '../services/dns.service.js';
 import { getSettingsSync } from '../services/settings.service.js';
 import { telegramEnabled } from '../services/telegram.service.js';
+import config from '../config/env.js';
 import logger from '../utils/logger.js';
 
 const tasks = [];
@@ -36,6 +37,20 @@ export function startJobs() {
 
   // Hourly stats reconciliation (5 minutes past each hour)
   tasks.push(cron.schedule('5 * * * *', run('reconcile', () => reconcileStats({ hours: 2 })), { timezone: tz }));
+
+  /*
+   * Nightly deep rebuild at 02:40. The hourly pass above can only fix what it
+   * can see; anything older stays as it was first written, so a rollup that
+   * disagrees with the raw clicks never heals. This walks a wider window and
+   * rewrites those buckets from the clicks, which are the record of truth.
+   */
+  tasks.push(
+    cron.schedule(
+      '40 2 * * *',
+      run('reconcile-deep', () => reconcileStats({ hours: config.reconcileDeepDays * 24 })),
+      { timezone: tz }
+    )
+  );
 
   // Daily raw-click cleanup at 03:30
   tasks.push(cron.schedule('30 3 * * *', run('cleanup', cleanupOldClicks), { timezone: tz }));
