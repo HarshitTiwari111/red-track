@@ -67,6 +67,12 @@ const clickSchema = new mongoose.Schema(
       role1: { type: String, default: '' },
       role2: { type: String, default: '' },
     },
+    /**
+     * The traffic source's own click reference, read from whichever parameter
+     * that source calls it (its clickIdParam). Platforms that use a well known
+     * name fall back to the three below.
+     */
+    clickRef: { type: String, default: '' },
     gclid: { type: String, default: '' },
     fbclid: { type: String, default: '' },
     ttclid: { type: String, default: '' },

@@ -80,6 +80,17 @@ const UTM_ROLES = [
   'role2',
 ];
 
+/**
+ * The click reference the traffic source sends back. Its parameter name is
+ * configured per source; templates store it the way the platform documents it
+ * ("{gclid}"), so the braces come off before the lookup.
+ */
+export function resolveClickRef(query, source) {
+  const param = str(source?.clickIdParam, 64).replace(/[{}]/g, '');
+  if (param && query[param]) return str(query[param], 512);
+  return str(query.gclid || query.fbclid || query.ttclid, 512);
+}
+
 export function applyParamRoles(click, query, source) {
   if (!source?.params?.length) return;
   for (const p of source.params) {
@@ -150,6 +161,7 @@ export function buildClick(campaign, req, { entry = 'redirect' } = {}) {
     // "en-GB,en;q=0.9" -> "en-GB"
     language: str(req.get('accept-language'), 64).split(',')[0].trim(),
     ...extractParams(query),
+    clickRef: resolveClickRef(query, source),
     cost: resolveCost(campaign, source, query),
     pathIndex: pathIndex >= 0 ? pathIndex : 0,
     landerId: lander?._id || null,

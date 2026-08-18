@@ -64,7 +64,7 @@ const ALL_COLUMNS = [
   { key: 'device', label: 'Device', render: (r) => txt(r.uaParsed?.device) },
   { key: 'ip', label: 'IP', render: (r) => mono(r.ip, 130) },
   { key: 'ua', label: 'User agent', render: (r) => mono(r.ua, 240) },
-  { key: 'referer', label: 'Ref ID', render: (r) => mono(r.referer, 200) },
+  { key: 'clickRef', label: 'Ref ID', render: (r) => mono(r.clickRef, 200) },
   { key: 'cost', label: 'Cost', num: true, render: (r) => Number(r.cost || 0).toFixed(4) },
   ...Array.from({ length: 20 }, (_, i) => ({
     key: `sub${i + 1}`,
