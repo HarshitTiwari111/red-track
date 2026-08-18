@@ -70,6 +70,24 @@ export default function OfferModal({ value, networks, knownTags = [], onChange, 
   const setCaps = (patch) => onChange({ ...value, caps: { ...value.caps, ...patch } });
 
   const network = networks.find((n) => String(n._id) === String(value.networkId));
+
+  /**
+   * Choosing a source fills the URL from that source's template, so the shape
+   * every offer on this network shares - and the {clickid} attribution depends
+   * on - does not have to be retyped.
+   *
+   * A URL that has been edited is never overwritten. Only an empty box, or one
+   * still holding the previous source's template untouched, is replaced: that
+   * is what makes switching sources by mistake harmless.
+   */
+  const pickNetwork = (id) => {
+    const next = networks.find((n) => String(n._id) === String(id));
+    const untouched = !value.url || value.url === network?.offerUrlTemplate;
+    set({
+      networkId: id,
+      ...(untouched && next?.offerUrlTemplate ? { url: next.offerUrlTemplate } : {}),
+    });
+  };
   const postbackUrl = network
     ? `${window.location.origin}/postback?clickid={clickid}&payout={payout}&txid={txid}&status={status}&key=${network.postbackSecurityKey}`
     : `${window.location.origin}/postback?clickid={clickid}&payout={payout}&txid={txid}&status={status}`;
@@ -138,7 +156,7 @@ export default function OfferModal({ value, networks, knownTags = [], onChange, 
           </Field>
 
           <Field label="Offer source" required hint="The affiliate network this offer belongs to — it scopes postback deduplication.">
-            <select value={value.networkId} onChange={(e) => set({ networkId: e.target.value })}>
+            <select value={value.networkId} onChange={(e) => pickNetwork(e.target.value)}>
               <option value="">None</option>
               {networks.map((n) => (
                 <option key={n._id} value={n._id}>

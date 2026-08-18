@@ -190,7 +190,10 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
             </select>
           </Field>
 
-          <Field label="Offer URL template">
+          <Field
+            label="Offer URL template"
+            hint="Fills the URL of every new offer created under this source, so the shape stays the same and {clickid} is never forgotten."
+          >
             <input
               type="text"
               className="mono"
