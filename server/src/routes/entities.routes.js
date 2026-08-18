@@ -17,7 +17,8 @@ import {
 } from '../services/google.service.js';
 import AffiliateNetwork, { POSTBACK_ROLES, DUPLICATE_MODES } from '../models/AffiliateNetwork.js';
 import { networkCatalogSummary, getNetworkTemplate } from '../services/networkCatalog.service.js';
-import Offer from '../models/Offer.js';
+import Offer, { sanitizeOffer } from '../models/Offer.js';
+import { normalizeCapiPixels } from '../models/capiPixel.js';
 import Lander, { LANDER_TYPES } from '../models/Lander.js';
 import FunnelTemplate, { FUNNEL_TYPES } from '../models/FunnelTemplate.js';
 import Domain from '../models/Domain.js';
@@ -119,24 +120,7 @@ const normalizeSource = async (body, existing = null) => {
   }
 
   if (Array.isArray(body.capiPixels)) {
-    const prev = existing?.capiPixels || [];
-    body.capiPixels = body.capiPixels
-      .map((p, i) => {
-        const pixelId = str(p?.pixelId, 64);
-        // Match on pixel id rather than index so reordering or deleting a row
-        // above cannot hand one pixel another pixel's token
-        const was = prev.find((x) => x.pixelId && x.pixelId === pixelId) || prev[i] || {};
-        return {
-          platform: 'meta',
-          label: str(p?.label, 80),
-          pixelId,
-          accessToken:
-            typeof p?.accessToken === 'string' ? str(p.accessToken, 512) : was.accessToken || '',
-          testEventCode: str(p?.testEventCode, 40),
-          enabled: p?.enabled !== false,
-        };
-      })
-      .filter((p) => p.pixelId);
+    body.capiPixels = normalizeCapiPixels(body.capiPixels, existing?.capiPixels || []);
   }
 
   if (Array.isArray(body.params)) {
@@ -618,13 +602,16 @@ router.post(
 );
 
 /* ------------------------------------------------------------------ offers */
-const normalizeOffer = async (body) => {
+const normalizeOffer = async (body, existing = null) => {
   if (!str(body.name)) throw badRequest('Name is required');
   if (!isHttpUrl(body.url)) throw badRequest('Offer URL must start with http:// or https://');
   if (body.networkId === '') body.networkId = null;
   if (Array.isArray(body.geo)) body.geo = body.geo.map((g) => String(g).toUpperCase().slice(0, 3));
   if (Array.isArray(body.tags)) {
     body.tags = [...new Set(body.tags.map((t) => str(t, 40)).filter(Boolean))];
+  }
+  if (Array.isArray(body.capiPixels)) {
+    body.capiPixels = normalizeCapiPixels(body.capiPixels, existing?.capiPixels || []);
   }
   if (body.caps) {
     const c = body.caps;
@@ -767,7 +754,10 @@ router.post(
   })
 );
 
-router.use('/offers', crudRouter(Offer, { beforeSave: normalizeOffer, afterWrite: afterOfferWrite }));
+router.use(
+  '/offers',
+  crudRouter(Offer, { beforeSave: normalizeOffer, afterWrite: afterOfferWrite, sanitize: sanitizeOffer })
+);
 
 /* ----------------------------------------------------------------- landers */
 const normalizeLander = async (body) => {

@@ -290,15 +290,25 @@ export async function recordConversion({
    * the conversion is already saved and the caller owes the network a fast 200,
    * so a slow or unhappy Graph API must not hold the response open.
    */
-  if (channel?.capiPixels?.length) {
-    forwardConversionToMeta(channel, {
+  /*
+   * Pixels can be set on the channel that bought the click and on the offer
+   * that paid for it. The same pixel configured in both places must still
+   * receive one event, so they are merged by pixel id first - and Meta would
+   * count a repeat anyway, since every copy carries the same event id.
+   */
+  const pixels = [...(channel?.capiPixels || []), ...(offer?.capiPixels || [])].filter(
+    (p, i, all) => all.findIndex((x) => x.pixelId === p.pixelId) === i
+  );
+
+  if (pixels.length) {
+    forwardConversionToMeta({ capiPixels: pixels }, {
       // Meta collapses this with the browser pixel event of the same id, so a
       // site running both the pixel and this postback is not counted twice.
       eventId: String(created._id),
       eventName: finalType,
       time: created.ts,
       value: finalPayout,
-      currency: channel.currency || 'USD',
+      currency: channel?.currency || 'USD',
       url: str(url, 2048),
       ip: click.ip || '',
       userAgent: click.ua || '',

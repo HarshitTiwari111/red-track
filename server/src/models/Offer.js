@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { capiPixelSchema, sanitizeCapiPixels } from './capiPixel.js';
 
 /**
  * Caps temporarily pull an offer out of the rotation once a threshold is hit
@@ -41,6 +42,12 @@ const offerSchema = new mongoose.Schema(
     },
     geo: { type: [String], default: [] },
     tags: { type: [String], default: [], index: true },
+    /**
+     * Conversions on this offer are also mirrored to these pixels. Kept here as
+     * well as on the traffic channel because an offer is the other place a
+     * person thinks about a conversion - what was actually sold.
+     */
+    capiPixels: { type: [capiPixelSchema], default: [] },
     caps: { type: capsSchema, default: () => ({}) },
     status: { type: String, enum: ['active', 'paused'], default: 'active' },
     notes: { type: String, default: '' },
@@ -49,6 +56,14 @@ const offerSchema = new mongoose.Schema(
 );
 
 offerSchema.index({ name: 1 });
+
+/** Access tokens are write-only over the API; .lean() reads skip toJSON. */
+export function sanitizeOffer(doc) {
+  if (!doc || typeof doc !== 'object') return doc;
+  const out = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+  if (Array.isArray(out.capiPixels)) out.capiPixels = sanitizeCapiPixels(out.capiPixels);
+  return out;
+}
 
 export const Offer = mongoose.model('Offer', offerSchema);
 export default Offer;

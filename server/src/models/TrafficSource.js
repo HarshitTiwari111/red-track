@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { capiPixelSchema, sanitizeCapiPixels } from './capiPixel.js';
 
 /**
  * A parameter role wires an incoming query parameter into a known slot on the
@@ -110,19 +111,6 @@ const cm360Schema = new mongoose.Schema(
   { _id: false }
 );
 
-/** A Conversions API destination: conversions are mirrored back to the platform. */
-const capiPixelSchema = new mongoose.Schema(
-  {
-    platform: { type: String, enum: ['meta'], default: 'meta' },
-    label: { type: String, default: '', trim: true },
-    pixelId: { type: String, default: '', trim: true },
-    accessToken: { type: String, default: '', trim: true },
-    // Sends events to Meta's test console instead of counting them for real
-    testEventCode: { type: String, default: '', trim: true },
-    enabled: { type: Boolean, default: true },
-  },
-  { _id: false }
-);
 
 const paramSchema = new mongoose.Schema(
   {
@@ -211,12 +199,7 @@ export function sanitizeSource(doc) {
     kept.hasToken = kept.hasAccessToken;
     out.integration = kept;
   }
-  if (Array.isArray(out.capiPixels)) {
-    out.capiPixels = out.capiPixels.map((p) => {
-      const { accessToken, ...rest } = p;
-      return { ...rest, hasToken: !!accessToken };
-    });
-  }
+  if (Array.isArray(out.capiPixels)) out.capiPixels = sanitizeCapiPixels(out.capiPixels);
   return out;
 }
 
