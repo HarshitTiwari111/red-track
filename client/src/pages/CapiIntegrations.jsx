@@ -147,7 +147,9 @@ export default function CapiIntegrations() {
               <th>Title</th>
               <th>Date connected</th>
               <th>Pixel ID</th>
-              <th>Events sent</th>
+              {/* The header carries `num` too, or it stays left while the
+                  figure under it is pushed to the right of a wide column. */}
+              <th className="num">Events sent</th>
               <th>Details</th>
               <th>Actions</th>
             </tr>
