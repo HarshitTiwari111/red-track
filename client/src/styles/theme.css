@@ -3344,3 +3344,75 @@ tr.pb-detail td {
   line-height: 1.9;
   font-size: 13px;
 }
+
+/* Conversion-matching row: two fields, the row's payout button, then remove. */
+.cm-head.cm-match,
+.cm-row.cm-match {
+  grid-template-columns: 1fr 1fr auto auto;
+}
+
+/*
+ * The "Add More" under a repeatable block. A filled button rather than a text
+ * link, so it reads as the way to grow the list rather than a footnote.
+ */
+.btn-add-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 4px;
+  padding: 11px 22px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg-alt);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.btn-add-more:hover {
+  color: var(--text);
+}
+.btn-add-more svg {
+  font-size: 16px;
+}
+
+/*
+ * The EMQ cell explains itself on hover. A real element rather than the
+ * browser's own title tooltip, which renders as one long unreadable line and
+ * cannot carry the steps as a list.
+ */
+.emq-cell {
+  position: relative;
+  display: inline-block;
+}
+.emq-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 268px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #3c3c3c;
+  color: #fff;
+  font-size: 11.5px;
+  line-height: 1.75;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 28%);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+.emq-cell:hover .emq-tip,
+.emq-cell:focus-within .emq-tip {
+  opacity: 1;
+  visibility: visible;
+}
+.emq-tip ul {
+  margin: 2px 0 0;
+  padding-left: 14px;
+}
+.emq-tip li {
+  list-style: disc;
+}

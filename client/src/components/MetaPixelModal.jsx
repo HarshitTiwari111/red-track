@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LuCircleHelp, LuInfo, LuPlus, LuTrash2 } from 'react-icons/lu';
+import { LuCircleHelp, LuInfo, LuPlus, LuTrash2, LuX } from 'react-icons/lu';
 import { SiMeta } from 'react-icons/si';
 import Modal from './Modal.jsx';
 import Field, { Switch } from './Field.jsx';
@@ -60,12 +60,19 @@ export default function MetaPixelModal({ value, onChange, onClose, onSave, savin
   const [showPayout, setShowPayout] = useState((value.payoutRules || []).length > 0);
   const [conversionTypes, setConversionTypes] = useState([]);
 
-  // The conversion types this install records, offered as suggestions below.
+  /*
+   * The conversion types this install records. Until someone declares a list in
+   * Settings the tracker keeps whatever name the postback sends, so the common
+   * ones are offered instead of an empty dropdown.
+   */
   useEffect(() => {
     api
       .get('/settings')
-      .then(({ data }) => setConversionTypes((data.conversionTypes || []).map((t) => t.name).filter(Boolean)))
-      .catch(() => setConversionTypes([]));
+      .then(({ data }) => {
+        const named = (data.conversionTypes || []).map((t) => t.name).filter(Boolean);
+        setConversionTypes(named.length ? named : ['conversion', 'sale', 'lead', 'signup', 'deposit']);
+      })
+      .catch(() => setConversionTypes(['conversion', 'sale', 'lead', 'signup', 'deposit']));
   }, []);
 
   const set = (patch) => onChange({ ...value, ...patch });
@@ -290,65 +297,88 @@ export default function MetaPixelModal({ value, onChange, onClose, onSave, savin
       </div>
 
       {value.customConversionMatching && (
-        <div className="rt-card">
-          <div className="rt-card-body tight">
-            <div className="rt-hint" style={{ marginTop: 0 }}>
-              Send a conversion type under a different event name. Without a rule, the conversion is
-              sent under the name the postback used, or the default event name above.
-            </div>
-            {matches.map((m, i) => (
-              <div className="cm-row cm3" key={i}>
-                <Field label={`Conversion Type ${i + 1}`}>
-                  {/* A list of the types this tracker records, with room for one
-                      the settings do not name yet. */}
-                  <input
-                    type="text"
-                    list="kap-conversion-types"
-                    value={m.conversionType}
-                    onChange={(e) => setMatch(i, { conversionType: e.target.value })}
-                    placeholder="conversion"
-                  />
-                </Field>
-                <Field label={`Event Name ${i + 1}`}>
-                  <select value={m.eventName} onChange={(e) => setMatch(i, { eventName: e.target.value })}>
-                    <option value="">Select an event</option>
-                    {META_EVENTS.map((e) => (
-                      <option key={e} value={e}>
-                        {e}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <div className="cm-tail">
-                  <button
-                    type="button"
-                    className="head-icon-btn danger"
-                    onClick={() => set({ conversionMatching: matches.filter((_, x) => x !== i) })}
-                    title="Remove this rule"
-                  >
-                    <LuTrash2 />
-                  </button>
-                </div>
-              </div>
-            ))}
-            <datalist id="kap-conversion-types">
-              {conversionTypes.map((t) => (
-                <option key={t} value={t} />
-              ))}
-            </datalist>
-            <button
-              type="button"
-              className="link-plain"
-              onClick={() => set({ conversionMatching: [...matches, { conversionType: '', eventName: '' }] })}
-            >
-              + Add More
-            </button>
-            <div className="rt-hint">
-              Meta scores Event Match Quality per event name, so a rule here is what makes the EMQ
-              score on the list available.
-            </div>
+        <>
+          <div className="cm-head cm-match">
+            <span>
+              Conversion Type
+              <LuCircleHelp title="A conversion type this tracker records, e.g. the one a postback sends." />
+            </span>
+            <span>
+              Event name
+              <LuCircleHelp title="The Meta standard event it is sent as. Only these are scored for EMQ." />
+            </span>
+            <span />
+            <span />
           </div>
-        </div>
+
+          {matches.map((m, i) => (
+            <div className="cm-row cm-match" key={i}>
+              <Field label={`Conversion Type ${i + 1}`}>
+                <select
+                  value={m.conversionType}
+                  onChange={(e) => setMatch(i, { conversionType: e.target.value })}
+                >
+                  <option value="">None</option>
+                  {conversionTypes.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                  {/* A type saved before it was removed from Settings still shows */}
+                  {m.conversionType && !conversionTypes.includes(m.conversionType) && (
+                    <option value={m.conversionType}>{m.conversionType}</option>
+                  )}
+                </select>
+              </Field>
+              <Field label={`Event Name ${i + 1}`}>
+                <select value={m.eventName} onChange={(e) => setMatch(i, { eventName: e.target.value })}>
+                  <option value="">None</option>
+                  {META_EVENTS.map((e) => (
+                    <option key={e} value={e}>
+                      {e}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <button
+                type="button"
+                className="add-more"
+                onClick={() => {
+                  setShowPayout(true);
+                  if (!rules.some((r) => r.conversionType === m.conversionType)) {
+                    set({ payoutRules: [...rules, { conversionType: m.conversionType, value: 0 }] });
+                  }
+                }}
+              >
+                <LuPlus />
+                Add payout customisation
+              </button>
+              <div className="cm-tail">
+                <button
+                  type="button"
+                  className="head-icon-btn"
+                  onClick={() => set({ conversionMatching: matches.filter((_, x) => x !== i) })}
+                  title="Remove this rule"
+                >
+                  <LuX />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            className="btn-add-more"
+            onClick={() => set({ conversionMatching: [...matches, { conversionType: '', eventName: '' }] })}
+          >
+            <LuPlus />
+            Add More
+          </button>
+          <div className="rt-hint">
+            Meta scores Event Match Quality per event name, so a rule here is what makes the EMQ score
+            on the list available.
+          </div>
+        </>
       )}
     </Modal>
   );

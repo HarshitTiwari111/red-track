@@ -33,9 +33,6 @@ const emqMissing = (p) => {
   return out;
 };
 const emqReady = (p) => emqMissing(p).length === 0;
-const EMQ_STEPS =
-  'To view your EMQ score: open Edit pixel, set the Data Quality API token, ' +
-  'switch on Custom Conversion Matching, then choose a conversion type and event name.';
 
 export default function CapiIntegrations() {
   const [confirm, confirmUI] = useConfirm();
@@ -233,17 +230,29 @@ export default function CapiIntegrations() {
                     {/*
                       Meta only scores an event it has been told to look at, so the
                       link stays inert until the pixel carries the token and the
-                      rule that make a score possible. The title spells out what is
-                      still missing rather than leaving a dead link.
+                      rule that make a score possible. Hovering it lists the steps
+                      still outstanding rather than leaving a dead link.
                     */}
-                    <button
-                      type="button"
-                      className={emqReady(r) ? 'cell-link' : 'cell-link muted'}
-                      title={emqReady(r) ? 'Read the score from Meta' : EMQ_STEPS}
-                      onClick={() => (emqReady(r) ? loadEmq(r) : setEmqFor({ row: r, missing: emqMissing(r) }))}
-                    >
-                      View EMQ Score
-                    </button>
+                    <span className="emq-cell">
+                      <button
+                        type="button"
+                        className={emqReady(r) ? 'cell-link' : 'cell-link muted'}
+                        onClick={() => (emqReady(r) ? loadEmq(r) : setEmqFor({ row: r, missing: emqMissing(r) }))}
+                      >
+                        View EMQ Score
+                      </button>
+                      {!emqReady(r) && (
+                        <span className="emq-tip">
+                          To view your EMQ score, follow these steps:
+                          <ul>
+                            <li>Click on &apos;Edit pixel&apos; icon,</li>
+                            <li>Set Data Quality API token,</li>
+                            <li>Switch on custom conversion matching,</li>
+                            <li>Choose conversion type and event name.</li>
+                          </ul>
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td>
                     <div className="row-actions">
