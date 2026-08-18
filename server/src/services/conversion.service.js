@@ -73,6 +73,16 @@ function sendToMeta({ conversion, click, channel, offer, url, status, payout, ty
 }
 
 /**
+ * The value a network sends for one of the roles that has no field of its own
+ * on the offer source form. The role names the parameter, so it wins over the
+ * conventional spellings guessed at otherwise.
+ */
+function roleValue(network, role, rawQuery) {
+  const named = (network?.params || []).find((p) => p.role === role)?.param;
+  return named ? rawQuery?.[named] : undefined;
+}
+
+/**
  * Core postback/pixel handler. Always resolves - callers respond 200 regardless
  * so a network never sees an error and retries forever.
  * @returns {{ok:boolean, reason?:string, conversion?:object, duplicate?:boolean, updated?:boolean}}
@@ -298,10 +308,16 @@ export async function recordConversion({
       // postback-side values
       convSubs: extractConvSubs(rawQuery),
       postbackIp: ip,
-      event: str(rawQuery?.event, 80),
-      coupon: str(rawQuery?.coupon, 80),
-      refId: str(rawQuery?.ref_id ?? rawQuery?.refid ?? rawQuery?.ref, 120),
-      publisherRevenue: num(rawQuery?.pub_revenue ?? rawQuery?.publisher_revenue, 0),
+      event: str(roleValue(network, 'event', rawQuery) ?? rawQuery?.event, 80),
+      coupon: str(roleValue(network, 'coupon', rawQuery) ?? rawQuery?.coupon, 80),
+      refId: str(
+        roleValue(network, 'refid', rawQuery) ?? rawQuery?.ref_id ?? rawQuery?.refid ?? rawQuery?.ref,
+        120
+      ),
+      publisherRevenue: num(
+        roleValue(network, 'pubrevenue', rawQuery) ?? rawQuery?.pub_revenue ?? rawQuery?.publisher_revenue,
+        0
+      ),
       rawQuery,
       source,
     });
