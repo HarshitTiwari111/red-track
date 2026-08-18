@@ -175,8 +175,15 @@ export async function recordConversion({
     }
   }
 
-  let finalPayout = num(payout, 0);
-  if (!finalPayout && offer?.payoutType === 'fixed') finalPayout = num(offer.defaultPayout, 0);
+  /*
+   * "Fixed" means the offer's own revenue is the truth and whatever the network
+   * quotes is ignored - that is the whole point of choosing it over "auto".
+   * "Auto" takes the network's figure and falls back to the offer's default
+   * when the postback carries none.
+   */
+  const sentPayout = num(payout, 0);
+  const offerPayout = num(offer?.defaultPayout, 0);
+  const finalPayout = offer?.payoutType === 'fixed' ? offerPayout : sentPayout || offerPayout;
 
   // No status sent: the offer's default wins, then the network's.
   const fallbackStatus = oneOf(
