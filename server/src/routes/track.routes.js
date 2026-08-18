@@ -2,10 +2,10 @@ import express from 'express';
 import Click from '../models/Click.js';
 import config from '../config/env.js';
 import { getCampaignBySlug, getOffer, getCampaignById, getNetworkByKey } from '../services/cache.service.js';
-import { buildClick, persistClick, logClickError, CLICK_COOKIE } from '../services/click.service.js';
+import { buildClick, persistClick, logClickError, CLICK_COOKIE, SUBS } from '../services/click.service.js';
 import { selectOffer } from '../services/rotation.service.js';
 import { replaceMacros, buildMacroContext } from '../services/macro.service.js';
-import { incLpClick } from '../services/stats.service.js';
+import { incLpClick, incClickSubs } from '../services/stats.service.js';
 import { recordConversion, logPostback } from '../services/conversion.service.js';
 import { clientIp } from '../services/geo.service.js';
 import { str } from '../utils/validate.js';
@@ -148,11 +148,28 @@ router.get(CLICK_PATHS, openCors, async (req, res) => {
       res.redirect(302, url);
     }
 
+    /*
+     * A lander may add subs to the hop link to tell its variations apart. Only
+     * slots the click left empty are filled: overwriting one would silently
+     * throw away whatever the traffic source put there, which is the value the
+     * whole report is keyed on.
+     */
+    const hopSubs = {};
+    for (const f of SUBS) {
+      const v = str(req.query[f], 255);
+      if (v && !click[f]) hopSubs[f] = v;
+    }
+    const learned = Object.keys(hopSubs);
+
     // async tail: mark the lander click-through exactly once
-    if (!click.lpClick) {
-      Click.updateOne({ clickid, lpClick: { $ne: true } }, { $set: { lpClick: true, offerId: offer._id } })
+    if (!click.lpClick || learned.length) {
+      const set = { ...hopSubs };
+      if (!click.lpClick) Object.assign(set, { lpClick: true, offerId: offer._id });
+      Click.updateOne({ clickid, ...(click.lpClick ? {} : { lpClick: { $ne: true } }) }, { $set: set })
         .then((r) => {
-          if (r.modifiedCount) incLpClick(click);
+          if (!r.modifiedCount) return;
+          if (!click.lpClick) incLpClick(click);
+          if (learned.length) incClickSubs({ ...click, ...hopSubs }, learned);
         })
         .catch(() => {});
     }

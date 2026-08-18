@@ -21,6 +21,31 @@ function safe(promise, label) {
   return promise.catch((err) => logger.warn(`stats ${label} failed: ${err.message}`));
 }
 
+/**
+ * Count a click against sub keys only learned after the redirect - the lander
+ * hop can carry values the campaign link did not. Without this the Clicks Log
+ * would show the value while the sub report stayed blank.
+ */
+export function incClickSubs(click, fields) {
+  if (click.botFlag) return;
+  const day = localDayKey(click.ts || new Date(), tz());
+  const keys = fields.filter((f) => SUB_FIELDS.includes(f) && click[f]).map((f) => `${f}:${String(click[f]).slice(0, 120)}`);
+  if (!keys.length) return;
+  safe(
+    StatsSubs.bulkWrite(
+      keys.map((subKey) => ({
+        updateOne: {
+          filter: { campaignId: click.campaignId, day, subKey },
+          update: { $inc: { clicks: 1, cost: 0 } },
+          upsert: true,
+        },
+      })),
+      { ordered: false }
+    ),
+    'incClickSubs'
+  );
+}
+
 export function incClick(click) {
   const bucket = localHourBucket(click.ts || new Date(), tz());
   const day = localDayKey(click.ts || new Date(), tz());
