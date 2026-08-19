@@ -32,7 +32,7 @@ export const blankOffer = () => ({
   url: '',
   payoutType: 'auto',
   defaultPayout: 0,
-  defaultConversionStatus: 'approved',
+  defaultConversionStatus: '',
   geo: [],
   tags: [],
   status: 'active',
@@ -218,11 +218,15 @@ export default function OfferModal({ value, networks, knownTags = [], onChange, 
             />
           </Field>
 
-          <Field label="Default conversion status" hint="Applied when a postback arrives without a status.">
+          <Field
+            label="Default conversion status"
+            hint="Applied when a postback arrives without a status. Left as the offer source's, it follows whatever that source is set to."
+          >
             <select
               value={value.defaultConversionStatus}
               onChange={(e) => set({ defaultConversionStatus: e.target.value })}
             >
+              <option value="">Use the offer source&apos;s setting</option>
               <option value="approved">approved</option>
               <option value="pending">pending</option>
               <option value="rejected">rejected</option>

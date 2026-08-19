@@ -35,10 +35,16 @@ const offerSchema = new mongoose.Schema(
     payoutType: { type: String, enum: ['auto', 'fixed'], default: 'auto' },
     defaultPayout: { type: Number, default: 0 },
     // Status applied to a conversion when the network sends none
+    /**
+     * Empty means "whatever the offer source says". It has to be the default:
+     * a real status here always wins, so an offer that merely never had one
+     * chosen would otherwise override the source's setting and leave that
+     * setting unreachable for every offer that has a source.
+     */
     defaultConversionStatus: {
       type: String,
-      enum: ['approved', 'pending', 'rejected'],
-      default: 'approved',
+      enum: ['', 'approved', 'pending', 'rejected'],
+      default: '',
     },
     geo: { type: [String], default: [] },
     tags: { type: [String], default: [], index: true },

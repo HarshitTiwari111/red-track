@@ -207,7 +207,7 @@ export async function recordConversion({
 
   // No status sent: the offer's default wins, then the network's.
   const fallbackStatus = oneOf(
-    offer?.defaultConversionStatus || network?.defaultConversionStatus,
+    offer?.defaultConversionStatus || owner?.defaultConversionStatus,
     CONV_STATUSES,
     'approved'
   );
@@ -232,7 +232,7 @@ export async function recordConversion({
 
   // --- dedupe / status update -------------------------------------------------
   // The matched event may override how repeats are treated for that event only
-  const networkMode = DUPLICATE_MODES.includes(network?.duplicateMode) ? network.duplicateMode : 'update';
+  const networkMode = DUPLICATE_MODES.includes(owner?.duplicateMode) ? owner.duplicateMode : 'update';
   const duplicateMode = matched && DUPLICATE_MODES.includes(matched.mode) ? matched.mode : networkMode;
 
   if (tx && networkId) {
