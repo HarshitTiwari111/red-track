@@ -90,20 +90,25 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
 
   const set = (patch) => onChange({ ...value, ...patch });
 
-  const roleParam = (role) => value.params.find((p) => p.role === role)?.param || '';
-
   /**
-   * The click id and the amount get their own two fields, so editing one means
-   * renaming whichever parameter already carries that role - or adding it, for
-   * a source that never had one.
+   * The click id and the amount are read under names this tracker already
+   * understands, so those two do not need renaming. What differs per network is
+   * the token it substitutes, and that is what these two fields hold - the URL
+   * reads `clickid=<their token>`, which is the line handed to the network.
    */
-  const setRoleParam = (role, param, name) => {
+  const CANONICAL = { clickid: 'clickid', payout: 'payout' };
+
+  const roleMacro = (role) => value.params.find((p) => p.role === role)?.macro || '';
+
+  const setRoleMacro = (role, macro, name) => {
     const at = value.params.findIndex((p) => p.role === role);
     if (at === -1) {
-      set({ params: [...value.params, { param, macro: '', name, role }] });
+      set({ params: [...value.params, { param: CANONICAL[role], macro, name, role }] });
       return;
     }
-    set({ params: value.params.map((p, x) => (x === at ? { ...p, param } : p)) });
+    set({
+      params: value.params.map((p, x) => (x === at ? { ...p, macro, param: p.param || CANONICAL[role] } : p)),
+    });
   };
 
   /*
@@ -130,18 +135,22 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
     set({ params: [...value.params, { param: '', macro: '', name: '', role: '', ...patch }] });
   };
 
-  /* The URL the affiliate network is given, built from the configured roles. */
+  /**
+   * The URL the affiliate network is given. Left of each `=` is the parameter
+   * this tracker reads; right of it is the token the network substitutes. That
+   * is the way round it has to be - the postback is sent BY the network, so the
+   * value can only ever be something the network knows how to fill in.
+   */
   const postbackUrl = () => {
     const parts = [];
-    const push = (role, macro) => {
-      const p = roleParam(role);
-      if (p) parts.push(`${p}=${macro}`);
-    };
-    push('clickid', '{clickid}');
-    push('payout', '{payout}');
-    push('txid', '{txid}');
-    push('status', '{status}');
-    push('type', '{type}');
+    for (const role of ['clickid', 'payout']) {
+      const macro = roleMacro(role);
+      if (macro) parts.push(`${CANONICAL[role]}=${macro}`);
+    }
+    for (const p of value.params) {
+      if (p.role === 'clickid' || p.role === 'payout') continue;
+      if (p.param && p.macro) parts.push(`${p.param}=${p.macro}`);
+    }
     /*
      * The key is only carried when this source insists on it. Without it the
      * tracker still knows which source a postback belongs to - the click id
@@ -256,27 +265,32 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
       <div className="rt-card">
         <div className="rt-card-head">Postback parameters</div>
         <div className="rt-card-body">
-          {/* The two a postback cannot work without: which parameter carries the
-              click id, and which carries the amount. Everything optional lives
-              in the grid below. */}
+          {/* The two a postback cannot work without. Each holds the token the
+              network puts the value in; everything optional lives in the grid
+              below. */}
           <Field label="CLICKID">
             <input
               type="text"
               className="mono"
-              value={roleParam('clickid')}
-              onChange={(e) => setRoleParam('clickid', e.target.value, 'Click ID')}
-              placeholder="clickid"
+              value={roleMacro('clickid')}
+              onChange={(e) => setRoleMacro('clickid', e.target.value, 'Click ID')}
+              placeholder="#s1#"
             />
           </Field>
           <Field label="SUM">
             <input
               type="text"
               className="mono"
-              value={roleParam('payout')}
-              onChange={(e) => setRoleParam('payout', e.target.value, 'Payout')}
-              placeholder="sum"
+              value={roleMacro('payout')}
+              onChange={(e) => setRoleMacro('payout', e.target.value, 'Payout')}
+              placeholder="#payout#"
             />
           </Field>
+          <div className="rt-hint">
+            Paste the token your network documents for each — <span className="mono">#s1#</span>,{' '}
+            <span className="mono">{'{transaction_id}'}</span>, whatever it calls them. The network
+            replaces it with the real value when it sends the postback.
+          </div>
         </div>
       </div>
 
