@@ -249,14 +249,19 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
 
           <Field
             label="Offer URL template"
-            hint="Fills the URL of every new offer created under this source, so the shape stays the same and {clickid} is never forgotten."
+            /*
+             * The example belongs in the hint, not the placeholder. A greyed-out
+             * URL sitting in the box is indistinguishable from a real one at a
+             * glance, and this field is empty far more often than not.
+             */
+            hint="Optional. Fills the URL of every new offer created under this source, so the shape stays the same and {clickid} is never forgotten. For example: https://network.com/click?aff_sub={clickid}&geo={country}"
           >
             <input
               type="text"
               className="mono"
               value={value.offerUrlTemplate}
               onChange={(e) => set({ offerUrlTemplate: e.target.value })}
-              placeholder="https://network.com/click?aff_sub={clickid}&geo={country}"
+              placeholder="Offer URL template"
             />
           </Field>
         </div>
