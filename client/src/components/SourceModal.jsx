@@ -194,6 +194,8 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
   const [googleSignIn, setGoogleSignIn] = useState(true);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState(null);
+  // Set once a sign-in is attempted on an install with no Meta app of its own
+  const [metaSetup, setMetaSetup] = useState(null);
   const origin = window.location.origin;
 
   useEffect(() => {
@@ -297,6 +299,7 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
   const signInWithMeta = async () => {
     setVerifying(true);
     setVerifyMsg(null);
+    setMetaSetup(null);
     try {
       await api.put(`/sources/${value._id}`, value);
       const { data } = await api.post(`/sources/${value._id}/integration/meta/start`);
@@ -330,7 +333,26 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
         }
       }, 700);
     } catch (e) {
-      setVerifyMsg({ ok: false, text: e.response?.data?.error || e.message });
+      const msg = e.response?.data?.error || e.message;
+      /*
+       * "No app configured" is not a failed sign-in, it is a step of the
+       * install nobody has done yet - and a red line quoting two env var
+       * names reads as a fault in the tracker. Swap it for the steps, with
+       * the redirect URI ready to paste, since that is the part that has to
+       * match Facebook exactly.
+       */
+      if (e.response?.status === 400 && /not set up on this install/i.test(msg)) {
+        let redirectUri = `${window.location.origin}/api/v1/integrations/meta/callback`;
+        try {
+          const { data } = await api.get('/integrations/config');
+          if (data.metaRedirectUri) redirectUri = data.metaRedirectUri;
+        } catch {
+          /* the fallback above is already the address this install serves */
+        }
+        setMetaSetup({ redirectUri });
+      } else {
+        setVerifyMsg({ ok: false, text: msg });
+      }
       setVerifying(false);
     }
   };
@@ -897,6 +919,38 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
               </span>
 
               {verifyAlert}
+
+              {metaSetup && (
+                <div className="info-note">
+                  <LuInfo />
+                  <div>
+                    <strong>One-time setup for this install.</strong> RedTrack signs you in through
+                    the Meta app it owns; a tracker you host yourself signs you in through yours, so
+                    it has to exist before the button can open Facebook.
+                    <ol className="rt-steps">
+                      <li>
+                        At <span className="mono">developers.facebook.com</span> create an app of
+                        type <strong>Business</strong> and add the{' '}
+                        <strong>Facebook Login</strong> product.
+                      </li>
+                      <li>
+                        Paste the address below into <em>Valid OAuth Redirect URIs</em>. It has to
+                        match character for character.
+                      </li>
+                      <li>
+                        Copy the app&apos;s <strong>App ID</strong> and{' '}
+                        <strong>App secret</strong> into this install&apos;s environment as{' '}
+                        <span className="mono">META_APP_ID</span> and{' '}
+                        <span className="mono">META_APP_SECRET</span>, then restart it.
+                      </li>
+                    </ol>
+                    <CopyField label="Valid OAuth Redirect URI" value={metaSetup.redirectUri} />
+                    <div style={{ marginTop: 8 }}>
+                      Done once for the whole tracker — every channel then connects with one click.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/*
                 Its own row, under the button, the way RedTrack lays it out -
