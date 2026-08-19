@@ -26,9 +26,24 @@ const DUPLICATE_MODES = [
   { id: 'ignore', label: 'Ignore duplicate' },
 ];
 
+/**
+ * The security key the postback URL is built around. Made here rather than on
+ * save, so the URL on screen is the real one from the moment the form opens -
+ * a placeholder would be copied into a network's account by anyone who did not
+ * think to come back after saving. The server keeps its own generator for
+ * sources created straight through the API.
+ */
+const newSecurityKey = () => {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
+};
+
 export const blankNetwork = () => ({
   name: '',
   aliasName: '',
+  postbackSecurityKey: newSecurityKey(),
   currency: 'USD',
   offerUrlTemplate: '',
   params: [
