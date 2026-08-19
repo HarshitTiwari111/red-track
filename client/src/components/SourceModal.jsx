@@ -784,7 +784,9 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
       {isMeta && (
         <>
           <div className="rt-card">
-            <div className="rt-card-head">
+            {/* The badge belongs beside the thing it describes, not stranded at
+                the far edge of a wide card. */}
+            <div className="rt-card-head badge-inline">
               <span className="head-title">
                 Meta API integration
                 <LuCircleHelp
@@ -834,20 +836,25 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
               {verifyAlert}
 
               {/*
-                Disabled on purpose. The setting only means anything to a cost
-                pull, and this install has none - a switch that saves and then
+                Its own row, under the button, the way RedTrack lays it out -
+                sharing a line made it read as part of the connect action.
+
+                Disabled on purpose: the setting only means anything to a cost
+                pull, and this install has none. A switch that saves and then
                 changes nothing is worse than one that says why it is off.
               */}
-              <label className="switch" style={{ marginTop: 18, opacity: 0.55 }}>
-                <input
-                  type="checkbox"
-                  disabled
-                  checked={!!integration.impressionCostSync}
-                  onChange={(e) => setIntegration({ impressionCostSync: e.target.checked })}
-                />
-                <span className="track" />
-                Impression cost sync
-              </label>
+              <div style={{ marginTop: 18 }}>
+                <label className="switch" style={{ opacity: 0.55 }}>
+                  <input
+                    type="checkbox"
+                    disabled
+                    checked={!!integration.impressionCostSync}
+                    onChange={(e) => setIntegration({ impressionCostSync: e.target.checked })}
+                  />
+                  <span className="track" />
+                  Impression cost sync
+                </label>
+              </div>
 
               <div className="info-note">
                 <LuInfo />

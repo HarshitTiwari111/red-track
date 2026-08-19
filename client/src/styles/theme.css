@@ -3406,3 +3406,10 @@ tr.pb-detail td {
 .emq-tip li {
   list-style: disc;
 }
+/*
+ * A card header whose status badge belongs next to its title rather than at the
+ * far edge - on a wide modal, space-between leaves the two unrelated.
+ */
+.rt-card-head.badge-inline {
+  justify-content: flex-start;
+}
