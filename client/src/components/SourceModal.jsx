@@ -192,6 +192,8 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
   // Whether the proxy can run a Google sign-in. Until it can, the refresh
   // token has to be supplied by hand, so the panel offers a field instead.
   const [googleSignIn, setGoogleSignIn] = useState(true);
+  const [metaSignIn, setMetaSignIn] = useState(false);
+  const [metaRedirectUri, setMetaRedirectUri] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState(null);
   const origin = window.location.origin;
@@ -203,8 +205,15 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
       .catch(() => setMacros([]));
     api
       .get('/integrations/config')
-      .then((r) => setGoogleSignIn(!!r.data.googleSignIn))
-      .catch(() => setGoogleSignIn(false));
+      .then((r) => {
+        setGoogleSignIn(!!r.data.googleSignIn);
+        setMetaSignIn(!!r.data.metaSignIn);
+        setMetaRedirectUri(r.data.metaRedirectUri || '');
+      })
+      .catch(() => {
+        setGoogleSignIn(false);
+        setMetaSignIn(false);
+      });
   }, []);
 
   const set = (patch) => onChange({ ...value, ...patch });
@@ -281,6 +290,54 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
       const { data } = await api.post(`/sources/${value._id}/integration/google/start`);
       localStorage.setItem(PENDING_GOOGLE_CHANNEL, value._id);
       window.location.href = data.url;
+    } catch (e) {
+      setVerifyMsg({ ok: false, text: e.response?.data?.error || e.message });
+      setVerifying(false);
+    }
+  };
+
+  /**
+   * Meta's consent screen, in a window of its own.
+   *
+   * Unlike the Google flow this does not leave the page: Facebook returns to a
+   * callback that closes itself and posts back, so the modal is still open with
+   * whatever was being typed still in it.
+   */
+  const signInWithMeta = async () => {
+    setVerifying(true);
+    setVerifyMsg(null);
+    try {
+      await api.put(`/sources/${value._id}`, value);
+      const { data } = await api.post(`/sources/${value._id}/integration/meta/start`);
+      const win = window.open(data.url, 'kap-meta-signin', 'width=620,height=740');
+      if (!win) throw new Error('Allow pop-ups for this site, then press Connect Meta again.');
+
+      const onMessage = async (e) => {
+        if (!e.data || typeof e.data.kapMeta === 'undefined') return;
+        window.removeEventListener('message', onMessage);
+        // Re-read the channel: the callback wrote the grant straight onto it
+        try {
+          const { data: fresh } = await api.get(`/sources/${value._id}`);
+          onChange(sourceToForm(fresh));
+          setVerifyMsg(
+            e.data.kapMeta
+              ? { ok: true, text: `Connected${fresh.integration?.accountName ? ` to ${fresh.integration.accountName}` : ''}.` }
+              : { ok: false, text: fresh.integration?.lastError || 'The sign-in did not complete.' }
+          );
+        } catch {
+          setVerifyMsg({ ok: false, text: 'Signed in — reopen this channel to see the result.' });
+        }
+        setVerifying(false);
+      };
+      window.addEventListener('message', onMessage);
+
+      // A window closed without answering leaves the button spinning otherwise
+      const poll = setInterval(() => {
+        if (win.closed) {
+          clearInterval(poll);
+          setVerifying(false);
+        }
+      }, 700);
     } catch (e) {
       setVerifyMsg({ ok: false, text: e.response?.data?.error || e.message });
       setVerifying(false);
@@ -822,18 +879,41 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
                 </Field>
               </div>
 
+              {/*
+                With an app configured this opens Facebook's own consent screen
+                and the account comes back with the grant. Without one there is
+                nothing to open, so the button falls back to checking whatever
+                was typed above - and the note below says what is missing.
+              */}
               <button
                 type="button"
                 className="brand-btn"
-                onClick={verify}
+                onClick={metaSignIn ? signInWithMeta : verify}
                 disabled={!value._id || verifying}
-                title={!value._id ? 'Save the channel first' : 'Check the credentials against Meta'}
+                title={
+                  !value._id
+                    ? 'Save the channel first'
+                    : metaSignIn
+                      ? 'Sign in with Facebook'
+                      : 'Check the typed credentials against Meta'
+                }
               >
                 {verifying ? <span className="spinner" /> : <SiMeta className="brand-mark-meta" />}
                 Connect Meta
               </button>
 
               {verifyAlert}
+
+              {!metaSignIn && (
+                <div className="rt-hint">
+                  Signing in with Facebook needs an app of your own. Create one at{' '}
+                  <span className="mono">developers.facebook.com</span>, add{' '}
+                  <span className="mono">{metaRedirectUri || '…/api/v1/integrations/meta/callback'}</span> as a valid
+                  OAuth redirect URI, then set <span className="mono">META_APP_ID</span> and{' '}
+                  <span className="mono">META_APP_SECRET</span> on this install. Until then, paste an access token from
+                  Business Settings above and this button checks it.
+                </div>
+              )}
 
               {/*
                 Its own row, under the button, the way RedTrack lays it out -

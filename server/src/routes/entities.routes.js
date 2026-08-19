@@ -8,7 +8,17 @@ import TrafficSource, {
   sanitizeSource,
 } from '../models/TrafficSource.js';
 import { catalogSummary, getCatalogEntry } from '../services/sourceCatalog.service.js';
-import { verifyMetaAccount, fetchEmqScore } from '../services/meta.service.js';
+import {
+  verifyMetaAccount,
+  fetchEmqScore,
+  metaConfigured,
+  buildMetaAuthUrl,
+  metaRedirectUri,
+  exchangeMetaCode,
+  listAdAccounts,
+  metaAccountName,
+} from '../services/meta.service.js';
+
 import {
   buildAuthUrl,
   googleConfigured,
@@ -35,6 +45,18 @@ import { badRequest, isHttpUrl, isObjectId, str, notFound , forbidden} from '../
 import { MACRO_LIST } from '../services/macro.service.js';
 
 const router = express.Router();
+
+/**
+ * Sign-ins waiting on Facebook to come back, keyed by the nonce that went out
+ * in the `state` parameter. Held in memory on purpose: a stale one is worth
+ * nothing, they last minutes, and one worker not knowing about another's is a
+ * retry rather than a fault.
+ */
+const metaStates = new Map();
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [k, v] of metaStates) if (v.at < cutoff) metaStates.delete(k);
+}, 60 * 1000).unref?.();
 
 /* --------------------------------------------------------- traffic sources */
 
@@ -167,7 +189,13 @@ const normalizeSource = async (body, existing = null) => {
  * directly.
  */
 router.get('/integrations/config', (req, res) => {
-  res.json({ googleSignIn: googleConfigured() });
+  res.json({
+    googleSignIn: googleConfigured(),
+    metaSignIn: metaConfigured(),
+    // Facebook refuses a redirect the app has not been told about, so the
+    // screen can show the operator exactly what to paste into their app.
+    metaRedirectUri: metaRedirectUri(),
+  });
 });
 
 /* ------------------------------------------------------------ meta pixels */
@@ -338,6 +366,107 @@ router.post(
  * which channel is being connected cannot ride along - the caller remembers it
  * and hands the token back to the route below.
  */
+/**
+ * Begin a Meta sign-in for one channel.
+ *
+ * The channel id rides along in `state` and comes back untouched, which is what
+ * lets the callback know whose token it is holding - and what stops a callback
+ * arriving from anywhere else being believed.
+ */
+router.post(
+  '/sources/:id/integration/meta/start',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    if (!metaConfigured()) {
+      throw badRequest(
+        'Meta sign-in is not set up on this install. Create an app at developers.facebook.com and set META_APP_ID and META_APP_SECRET.'
+      );
+    }
+    const doc = await TrafficSource.findById(req.params.id).lean();
+    if (!doc) throw notFound();
+    if (!ownsDoc(req, doc)) throw forbidden();
+
+    const nonce = newSecurityKey();
+    metaStates.set(nonce, { sourceId: String(doc._id), at: Date.now() });
+    res.json({ url: buildMetaAuthUrl(nonce), redirectUri: metaRedirectUri() });
+  })
+);
+
+/**
+ * Where Facebook returns. Exchanges the code, stores the token on the channel
+ * that started the flow, and closes the window it opened.
+ */
+router.get(
+  '/integrations/meta/callback',
+  asyncRoute(async (req, res) => {
+    const done = (msg, ok = false) =>
+      res.type('html').send(
+        `<!doctype html><meta charset="utf-8"><body style="font:14px system-ui;padding:32px">` +
+          `<p>${ok ? '✓ ' : ''}${msg}</p>` +
+          `<script>if(window.opener){window.opener.postMessage({kapMeta:${ok}},'*');setTimeout(()=>window.close(),1200)}</script>` +
+          `</body>`
+      );
+
+    const state = str(req.query.state, 64);
+    const entry = state ? metaStates.get(state) : null;
+    metaStates.delete(state);
+    if (!entry) return done('This sign-in link has already been used, or did not come from here.');
+
+    if (req.query.error) return done(`Facebook refused: ${str(req.query.error_description || req.query.error, 200)}`);
+    const code = str(req.query.code, 512);
+    if (!code) return done('Facebook returned no code.');
+
+    const token = await exchangeMetaCode(code);
+    if (!token.ok) return done(`Could not finish the sign-in: ${token.error}`);
+
+    const doc = await TrafficSource.findById(entry.sourceId);
+    if (!doc) return done('That traffic channel no longer exists.');
+
+    const [name, accounts] = await Promise.all([
+      metaAccountName(token.accessToken),
+      listAdAccounts(token.accessToken),
+    ]);
+
+    doc.integration.provider = 'meta';
+    doc.integration.accessToken = token.accessToken;
+    doc.integration.grantedEmail = name;
+    doc.integration.lastCheckAt = new Date();
+    /*
+     * A grant proves someone signed in, not that this channel points at one of
+     * their accounts. With exactly one visible account there is nothing to
+     * choose, so it is filled in and the channel is connected outright.
+     */
+    const list = accounts.ok ? accounts.accounts : [];
+    if (!doc.integration.adAccountId && list.length === 1) doc.integration.adAccountId = list[0].id;
+    const chosen = list.find((a) => a.id === doc.integration.adAccountId);
+    doc.integration.status = chosen ? 'connected' : 'not_connected';
+    doc.integration.accountName = chosen?.name || '';
+    doc.integration.lastError = chosen
+      ? ''
+      : list.length
+        ? 'Signed in. Pick which of the ad accounts this channel buys from.'
+        : accounts.ok
+          ? 'Signed in, but this login can see no ad accounts.'
+          : accounts.error;
+    await doc.save();
+    await publishConfigChange();
+
+    return done(chosen ? `Connected to ${chosen.name}. You can close this window.` : doc.integration.lastError, !!chosen);
+  })
+);
+
+/** The ad accounts the stored grant can see, for the channel's picker. */
+router.get(
+  '/sources/:id/integration/meta/accounts',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const doc = await TrafficSource.findOne({ _id: req.params.id, ...ownerFilter(req) }).lean();
+    if (!doc) throw notFound();
+    if (!doc.integration?.accessToken) return res.json({ ok: false, error: 'Not signed in yet', accounts: [] });
+    res.json(await listAdAccounts(doc.integration.accessToken));
+  })
+);
+
 router.post(
   '/sources/:id/integration/google/start',
   asyncRoute(async (req, res) => {

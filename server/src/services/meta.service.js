@@ -12,6 +12,7 @@
  */
 
 import MetaPixel from '../models/MetaPixel.js';
+import config from '../config/env.js';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const TIMEOUT_MS = 6000;
@@ -211,4 +212,86 @@ export async function fetchEmqScore(pixel) {
     matchedFields: d.matched_fields || d.user_data_fields || [],
   }));
   return { ok: true, events: rows, raw: res.body };
+}
+
+/* ─────────────────────────────── sign-in ─────────────────────────────── */
+
+/** Whether this install has an app of its own to sign in through. */
+export const metaConfigured = () => !!(config.meta.appId && config.meta.appSecret);
+
+/** Where Facebook sends the browser back to. Must match the app's settings. */
+export const metaRedirectUri = () => `${config.baseUrl}/api/v1/integrations/meta/callback`;
+
+/**
+ * The consent screen. Opening this is the whole of "Connect Meta" - Facebook
+ * asks the operator to approve, then returns a short-lived code to the
+ * redirect URI, which only this server can exchange.
+ */
+export function buildMetaAuthUrl(state) {
+  const p = new URLSearchParams({
+    client_id: config.meta.appId,
+    redirect_uri: metaRedirectUri(),
+    scope: config.meta.scope,
+    response_type: 'code',
+    state,
+  });
+  return `https://www.facebook.com/${config.meta.apiVersion}/dialog/oauth?${p}`;
+}
+
+/**
+ * Trade the returned code for a token, then trade that for a long-lived one.
+ * The short-lived token Facebook hands back lasts about an hour, which is no
+ * use to a tracker that reads spend on a schedule.
+ */
+export async function exchangeMetaCode(code) {
+  const first = await call(
+    `${GRAPH}/oauth/access_token?${new URLSearchParams({
+      client_id: config.meta.appId,
+      client_secret: config.meta.appSecret,
+      redirect_uri: metaRedirectUri(),
+      code,
+    })}`
+  );
+  if (!first.ok) return { ok: false, error: first.error };
+
+  const shortLived = first.body?.access_token;
+  if (!shortLived) return { ok: false, error: 'Facebook returned no access token' };
+
+  const long = await call(
+    `${GRAPH}/oauth/access_token?${new URLSearchParams({
+      grant_type: 'fb_exchange_token',
+      client_id: config.meta.appId,
+      client_secret: config.meta.appSecret,
+      fb_exchange_token: shortLived,
+    })}`
+  );
+  // A failed upgrade is not fatal: the short-lived token still works today, and
+  // saying so beats refusing a connection that would have run for an hour.
+  return {
+    ok: true,
+    accessToken: long.ok && long.body?.access_token ? long.body.access_token : shortLived,
+    longLived: Boolean(long.ok && long.body?.access_token),
+  };
+}
+
+/** The ad accounts a granted token can see, so the operator picks rather than types. */
+export async function listAdAccounts(accessToken) {
+  const res = await call(
+    `${GRAPH}/me/adaccounts?fields=account_id,name,account_status&limit=200&access_token=${encodeURIComponent(accessToken)}`
+  );
+  if (!res.ok) return { ok: false, error: res.error };
+  return {
+    ok: true,
+    accounts: (res.body?.data || []).map((a) => ({
+      id: String(a.account_id || '').replace(/^act_/, ''),
+      name: a.name || '',
+      status: a.account_status,
+    })),
+  };
+}
+
+/** Who granted it, for the panel to name the connection. */
+export async function metaAccountName(accessToken) {
+  const res = await call(`${GRAPH}/me?fields=name&access_token=${encodeURIComponent(accessToken)}`);
+  return res.ok ? String(res.body?.name || '') : '';
 }

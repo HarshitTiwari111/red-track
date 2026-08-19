@@ -39,6 +39,22 @@ export const config = {
     authUrl: process.env.GOOGLE_ADS_AUTH_URL || 'https://secure.dataram.workers.dev/auth/login',
   },
   /**
+   * Meta needs no proxy: its consent screen is a plain redirect, and the code
+   * it returns is exchanged straight from here. What it does need is an app of
+   * the operator's own - the app id travels in the URL the browser opens, and
+   * the secret never leaves this process.
+   *
+   * With neither set, "Connect Meta" says what is missing instead of opening a
+   * sign-in that Facebook would refuse.
+   */
+  meta: {
+    appId: process.env.META_APP_ID || '',
+    appSecret: process.env.META_APP_SECRET || '',
+    apiVersion: process.env.META_API_VERSION || 'v21.0',
+    // What the connection is for; ads_read is enough to read spend
+    scope: process.env.META_SCOPE || 'ads_read',
+  },
+  /**
    * How many reverse proxies sit in front of the app.
    *
    * Defaults to 0 (trust nothing) because any value above 0 makes req.ip come
