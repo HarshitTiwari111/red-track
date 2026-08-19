@@ -81,7 +81,7 @@ export default function CapiPixelPicker({ value = [], onChange, scope }) {
 
         <button
           type="button"
-          className="link-btn"
+          className="add-row-btn"
           onClick={() => onChange([...value, ''])}
           disabled={catalog.length === 0}
         >

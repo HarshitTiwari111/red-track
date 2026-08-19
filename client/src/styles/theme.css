@@ -2990,7 +2990,7 @@ tr.pb-detail td {
 }
 
 /* Borderless "+ Add …" action, centred under the list it appends to. */
-.link-btn {
+.add-row-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3006,7 +3006,7 @@ tr.pb-detail td {
   cursor: pointer;
   border-radius: 8px;
 }
-.link-btn:hover {
+.add-row-btn:hover {
   background: var(--accent-soft);
 }
 
