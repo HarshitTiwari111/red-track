@@ -679,11 +679,11 @@ export default function Sources() {
       {catalogOpen && (
         <SourceCatalogModal
           onClose={() => setCatalogOpen(false)}
-          onAdded={(created) => {
+          onAdded={(draft) => {
             setCatalogOpen(false);
             setFormError('');
-            setEditing(sourceToForm(created));
-            load();
+            // A draft, not a row - nothing to reload until Save writes it.
+            setEditing(sourceToForm(draft));
           }}
         />
       )}

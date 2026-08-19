@@ -41,7 +41,7 @@ export default function SourceCatalogModal({ onClose, onAdded }) {
       const { data } = await api.post('/sources/from-template', { templateId: entry.id });
       onAdded(data);
     } catch (err) {
-      setError(errMsg(err, 'Could not create the channel'));
+      setError(errMsg(err, 'Could not open the template'));
     } finally {
       setBusy('');
     }

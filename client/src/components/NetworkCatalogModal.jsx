@@ -46,7 +46,7 @@ export default function NetworkCatalogModal({ onClose, onAdded }) {
       const { data } = await api.post('/networks/from-template', { templateId: entry.id });
       onAdded(data);
     } catch (err) {
-      setError(errMsg(err, 'Could not create the offer source'));
+      setError(errMsg(err, 'Could not open the template'));
     } finally {
       setBusy('');
     }

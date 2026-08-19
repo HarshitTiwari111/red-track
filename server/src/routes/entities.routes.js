@@ -338,6 +338,15 @@ router.get('/sources/catalog', (req, res) => {
   res.json({ items: catalogSummary(), roles: PARAM_ROLES });
 });
 
+/**
+ * Fill a channel form from a template - and only that.
+ *
+ * Picking a template used to create the channel outright, so opening the
+ * Google Ads or Meta form to look at it left a row behind whether or not it
+ * was ever saved, and a few looks became a list of duplicates. A template is
+ * a starting point, not a decision: this returns the draft, and POST /sources
+ * is still what writes it down when the operator presses Save.
+ */
 router.post(
   '/sources/from-template',
   asyncRoute(async (req, res) => {
@@ -352,10 +361,7 @@ router.post(
       ...entry.template,
     });
 
-    body.ownerId = ownerOnCreate(req, {});
-    const created = await TrafficSource.create(body);
-    await publishConfigChange();
-    res.status(201).json(sanitizeSource(created.toObject()));
+    res.json(sanitizeSource(body));
   })
 );
 
@@ -723,9 +729,8 @@ router.post(
       null
     );
 
-    const created = await AffiliateNetwork.create(body);
-    await publishConfigChange();
-    res.status(201).json(created.toObject());
+    // A draft, for the same reason the channel one is - see above.
+    res.json(body);
   })
 );
 

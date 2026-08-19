@@ -604,11 +604,11 @@ export default function Networks() {
       {catalogOpen && (
         <NetworkCatalogModal
           onClose={() => setCatalogOpen(false)}
-          onAdded={(created) => {
+          onAdded={(draft) => {
             setCatalogOpen(false);
             setFormError('');
-            setEditing(networkToForm(created));
-            load();
+            // A draft, not a row - nothing to reload until Save writes it.
+            setEditing(networkToForm(draft));
           }}
         />
       )}
