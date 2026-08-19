@@ -2934,6 +2934,14 @@ tr.pb-detail td {
   opacity: 0.55;
   cursor: not-allowed;
 }
+/*
+ * Carries the tooltip for a button that is disabled. The browser dispatches
+ * no hover events to a disabled control, so a title on the button itself is
+ * never seen - this wrapper is what the pointer actually lands on.
+ */
+.tip-wrap {
+  display: inline-flex;
+}
 
 /* Explanatory note sitting under a control, led by an info glyph. */
 .info-note {

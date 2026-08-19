@@ -335,6 +335,19 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
     }
   };
 
+  /**
+   * Why the connect buttons are dead on an unsaved channel.
+   *
+   * The sign-in has to know which channel it is granting access to, and an
+   * unsaved one has no id yet - so the button is disabled. A disabled button
+   * dispatches no hover events, which means its own title never appears: the
+   * wrapper below is what makes the reason reachable, the way RedTrack shows
+   * it on hover instead of leaving a dead control unexplained.
+   */
+  const saveFirst = value._id
+    ? ''
+    : `Please save ${value.name || 'this channel'} as traffic channel first.`;
+
   const verifyAlert = verifyMsg ? (
     <div className={`alert ${verifyMsg.ok ? 'success' : 'error'}`}>{verifyMsg.text}</div>
   ) : integration.status === 'error' && integration.lastError ? (
@@ -622,22 +635,26 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
                   placeholder="123-456-7890"
                 />
               </Field>
-              <button
-                type="button"
-                className="brand-btn"
-                onClick={googleSignIn && integration.status !== 'connected' ? signInWithGoogle : verify}
-                disabled={!value._id || verifying}
-                title={
-                  googleSignIn && integration.status !== 'connected'
-                    ? 'Grant this tracker access to the ad account'
-                    : 'Check this account against Google'
-                }
-              >
-                {verifying ? <span className="spinner" /> : <SiGoogle className="brand-mark-google" />}
-                {googleSignIn && integration.status !== 'connected'
-                  ? 'Sign in with Google'
-                  : 'Connect'}
-              </button>
+              <span className="tip-wrap" title={saveFirst || undefined}>
+                <button
+                  type="button"
+                  className="brand-btn"
+                  onClick={googleSignIn && integration.status !== 'connected' ? signInWithGoogle : verify}
+                  disabled={!value._id || verifying}
+                  title={
+                    saveFirst
+                      ? undefined
+                      : googleSignIn && integration.status !== 'connected'
+                        ? 'Grant this tracker access to the ad account'
+                        : 'Check this account against Google'
+                  }
+                >
+                  {verifying ? <span className="spinner" /> : <SiGoogle className="brand-mark-google" />}
+                  {googleSignIn && integration.status !== 'connected'
+                    ? 'Sign in with Google'
+                    : 'Connect'}
+                </button>
+              </span>
             </div>
             <div className="rt-hint">
               {integration.grantedEmail
@@ -687,24 +704,31 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
             </div>
 
             <h4 className="sub-head">Conversion Matching</h4>
-            <div className="cm-head cm4">
-              <span>
-                Conversion Type <b>*</b>
-                <LuCircleHelp title="A conversion type recorded by this tracker." />
-              </span>
-              <span>
-                Conversion name <b>*</b>
-                <LuCircleHelp title="The conversion action's name in the Google Ads account." />
-              </span>
-              <span>
-                Category <b>*</b>
-                <LuCircleHelp title="The Google Ads conversion category the action belongs to." />
-              </span>
-              <span>
-                Include in &quot;conversions&quot; <b>*</b>
-                <LuCircleHelp title="Off keeps the action out of the bidding conversions column." />
-              </span>
-            </div>
+            {/*
+              Column names only once there is a column to name. A freshly
+              opened channel has no rows, and a heading hanging over empty
+              space reads as fields that failed to render.
+            */}
+            {matches.length > 0 && (
+              <div className="cm-head cm4">
+                <span>
+                  Conversion Type <b>*</b>
+                  <LuCircleHelp title="A conversion type recorded by this tracker." />
+                </span>
+                <span>
+                  Conversion name <b>*</b>
+                  <LuCircleHelp title="The conversion action's name in the Google Ads account." />
+                </span>
+                <span>
+                  Category <b>*</b>
+                  <LuCircleHelp title="The Google Ads conversion category the action belongs to." />
+                </span>
+                <span>
+                  Include in &quot;conversions&quot; <b>*</b>
+                  <LuCircleHelp title="Off keeps the action out of the bidding conversions column." />
+                </span>
+              </div>
+            )}
             {matches.map((m, i) => (
               <div className="cm-row cm4" key={i}>
                 <Field>
@@ -758,20 +782,22 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
             </button>
 
             <h4 className="sub-head">Campaign Manager 360</h4>
-            <div className="cm-head cm3">
-              <span>
-                Conversion Type <b>*</b>
-                <LuCircleHelp title="A conversion type recorded by this tracker." />
-              </span>
-              <span>
-                Profile ID <b>*</b>
-                <LuCircleHelp title="Your Campaign Manager 360 user profile id." />
-              </span>
-              <span>
-                Floodlight activity ID <b>*</b>
-                <LuCircleHelp title="The Floodlight activity the conversion is attributed to." />
-              </span>
-            </div>
+            {cm.length > 0 && (
+              <div className="cm-head cm3">
+                <span>
+                  Conversion Type <b>*</b>
+                  <LuCircleHelp title="A conversion type recorded by this tracker." />
+                </span>
+                <span>
+                  Profile ID <b>*</b>
+                  <LuCircleHelp title="Your Campaign Manager 360 user profile id." />
+                </span>
+                <span>
+                  Floodlight activity ID <b>*</b>
+                  <LuCircleHelp title="The Floodlight activity the conversion is attributed to." />
+                </span>
+              </div>
+            )}
             {cm.map((m, i) => (
               <div className="cm-row cm3" key={i}>
                 <Field>
@@ -857,16 +883,18 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
                 attempt failed. Whatever is wrong now comes back as a sentence
                 under the button instead.
               */}
-              <button
-                type="button"
-                className="brand-btn"
-                onClick={signInWithMeta}
-                disabled={!value._id || verifying}
-                title={!value._id ? 'Save the channel first' : 'Sign in with Facebook'}
-              >
-                {verifying ? <span className="spinner" /> : <SiMeta className="brand-mark-meta" />}
-                Connect Meta
-              </button>
+              <span className="tip-wrap" title={saveFirst || undefined}>
+                <button
+                  type="button"
+                  className="brand-btn"
+                  onClick={signInWithMeta}
+                  disabled={!value._id || verifying}
+                  title={saveFirst ? undefined : 'Sign in with Facebook'}
+                >
+                  {verifying ? <span className="spinner" /> : <SiMeta className="brand-mark-meta" />}
+                  Connect Meta
+                </button>
+              </span>
 
               {verifyAlert}
 
