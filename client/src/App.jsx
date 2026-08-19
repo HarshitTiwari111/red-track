@@ -22,7 +22,6 @@ import CapiIntegrations from './pages/CapiIntegrations.jsx';
 import PixelDetails from './pages/PixelDetails.jsx';
 import Settings from './pages/Settings.jsx';
 import Domains from './pages/Domains.jsx';
-import FunnelTemplates from './pages/FunnelTemplates.jsx';
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth();
@@ -66,7 +65,6 @@ export default function App() {
               <Route path="/conversion-tracking" element={<ConversionTracking />} />
               <Route path="/capi" element={<CapiIntegrations />} />
               <Route path="/capi/:id" element={<PixelDetails />} />
-              <Route path="/funnels" element={<FunnelTemplates />} />
               <Route path="/domains" element={<Domains />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
