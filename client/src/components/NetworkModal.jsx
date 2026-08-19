@@ -141,7 +141,16 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
     push('status', '{status}');
     push('type', '{type}');
     if (!parts.length) parts.push('clickid={clickid}', 'payout={payout}');
-    parts.push(`key=${value.postbackSecurityKey || '<security-key>'}`);
+    /*
+     * The key is only carried when this source insists on it. Without it the
+     * tracker still knows which source a postback belongs to - the click id
+     * leads to the click, the click to the offer, and the offer to its source -
+     * so pasting a key into a network's account by default only gives one more
+     * thing to get wrong.
+     */
+    if (value.postbackProtection?.enabled) {
+      parts.push(`key=${value.postbackSecurityKey || '<security-key>'}`);
+    }
     return `${origin}/postback?${parts.join('&')}`;
   };
 
@@ -412,6 +421,12 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
             onChange={(v) => set({ postbackProtection: { enabled: v } })}
             label="Enable"
           />
+          {value.postbackProtection.enabled && (
+            <div className="rt-hint">
+              The postback URL above now carries this source&apos;s key. Copy it again — a postback
+              arriving without the key is refused from here on.
+            </div>
+          )}
         </div>
       </div>
 
