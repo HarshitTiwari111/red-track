@@ -1,10 +1,9 @@
 /**
- * Meta (Facebook) Graph API calls: credential checks and Conversions API.
+ * Meta (Facebook) Graph API calls: sign-in, credential checks, Conversions API.
  *
- * There is no OAuth here on purpose. A self-hosted tracker has no registered
- * Meta app to redirect a browser through, and it does not need one: Business
- * Manager issues a long-lived System User token for the ad accounts you already
- * own, and that token is what these calls carry. The user pastes it once.
+ * The sign-in half needs a registered Meta app, and a self-hosted tracker has
+ * to be told about one - unlike Google, whose consent screen runs on a proxy
+ * that already holds its client. See metaApp() below for where it comes from.
  *
  * Nothing in this file may throw into a request path. A conversion is recorded
  * whether or not Meta accepts its copy, so every call here reports failure as a
@@ -13,6 +12,7 @@
 
 import MetaPixel from '../models/MetaPixel.js';
 import config from '../config/env.js';
+import { getSettingsSync } from './settings.service.js';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const TIMEOUT_MS = 6000;
@@ -216,8 +216,28 @@ export async function fetchEmqScore(pixel) {
 
 /* ─────────────────────────────── sign-in ─────────────────────────────── */
 
+/**
+ * The Meta app this install signs in through.
+ *
+ * Settings first, environment second. Google's consent runs on a proxy that
+ * already holds its client, so nobody configures Google here - Meta has no
+ * such proxy, and making its one-time setup an env var plus a restart put it
+ * out of reach of the person who actually has the Facebook account. Saved on
+ * the Settings page it takes effect on the next click.
+ */
+const metaApp = () => {
+  const s = getSettingsSync() || {};
+  return {
+    appId: s.metaAppId || config.meta.appId,
+    appSecret: s.metaAppSecret || config.meta.appSecret,
+  };
+};
+
 /** Whether this install has an app of its own to sign in through. */
-export const metaConfigured = () => !!(config.meta.appId && config.meta.appSecret);
+export const metaConfigured = () => {
+  const { appId, appSecret } = metaApp();
+  return !!(appId && appSecret);
+};
 
 /** Where Facebook sends the browser back to. Must match the app's settings. */
 export const metaRedirectUri = () => `${config.baseUrl}/api/v1/integrations/meta/callback`;
@@ -229,7 +249,7 @@ export const metaRedirectUri = () => `${config.baseUrl}/api/v1/integrations/meta
  */
 export function buildMetaAuthUrl(state) {
   const p = new URLSearchParams({
-    client_id: config.meta.appId,
+    client_id: metaApp().appId,
     redirect_uri: metaRedirectUri(),
     scope: config.meta.scope,
     response_type: 'code',
@@ -244,10 +264,11 @@ export function buildMetaAuthUrl(state) {
  * use to a tracker that reads spend on a schedule.
  */
 export async function exchangeMetaCode(code) {
+  const { appId, appSecret } = metaApp();
   const first = await call(
     `${GRAPH}/oauth/access_token?${new URLSearchParams({
-      client_id: config.meta.appId,
-      client_secret: config.meta.appSecret,
+      client_id: appId,
+      client_secret: appSecret,
       redirect_uri: metaRedirectUri(),
       code,
     })}`
@@ -260,8 +281,8 @@ export async function exchangeMetaCode(code) {
   const long = await call(
     `${GRAPH}/oauth/access_token?${new URLSearchParams({
       grant_type: 'fb_exchange_token',
-      client_id: config.meta.appId,
-      client_secret: config.meta.appSecret,
+      client_id: appId,
+      client_secret: appSecret,
       fb_exchange_token: shortLived,
     })}`
   );

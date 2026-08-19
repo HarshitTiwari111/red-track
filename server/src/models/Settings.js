@@ -71,6 +71,13 @@ const settingsSchema = new mongoose.Schema(
     rawClickRetentionDays: { type: Number, default: 90 },
     reportTimezone: { type: String, default: 'Asia/Kolkata' },
     telegramEnabled: { type: Boolean, default: true },
+    /**
+     * The Meta app "Connect Meta" signs in through. One app serves the whole
+     * install; the secret is write-only and never returned by the settings
+     * route, the same rule every other stored credential follows.
+     */
+    metaAppId: { type: String, default: '' },
+    metaAppSecret: { type: String, default: '' },
   },
   { collection: 'settings', versionKey: false, timestamps: true, _id: false }
 );

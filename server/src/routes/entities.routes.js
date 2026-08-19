@@ -38,7 +38,7 @@ import { asyncRoute } from '../middleware/error.js';
 import { publishConfigChange, getNetworkById } from '../services/cache.service.js';
 import { refreshCaps, capUsage, capStatus } from '../services/caps.service.js';
 import { runReport } from '../services/report.service.js';
-import { getSettingsSync } from '../services/settings.service.js';
+import { getSettings, getSettingsSync } from '../services/settings.service.js';
 import { parseRange } from '../utils/time.js';
 import { newSecurityKey, slugify } from '../utils/ids.js';
 import { badRequest, isHttpUrl, isObjectId, str, notFound , forbidden} from '../utils/validate.js';
@@ -383,9 +383,15 @@ router.post(
   '/sources/:id/integration/meta/start',
   asyncRoute(async (req, res) => {
     if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    /*
+     * Read the settings for real rather than trusting the 30s cache. The app
+     * was very likely saved seconds ago on another worker, and "you have not
+     * set this up" to someone who just did is the worst answer available.
+     */
+    await getSettings({ force: true });
     if (!metaConfigured()) {
       throw badRequest(
-        'Meta sign-in is not set up on this install. Create an app at developers.facebook.com and set META_APP_ID and META_APP_SECRET.'
+        'Meta sign-in is not set up on this install. Create an app at developers.facebook.com and save its App ID and App secret under Settings.'
       );
     }
     const doc = await TrafficSource.findById(req.params.id).lean();
@@ -422,6 +428,8 @@ router.get(
     const code = str(req.query.code, 512);
     if (!code) return done('Facebook returned no code.');
 
+    // The worker Facebook returned to need not be the one that started this
+    await getSettings({ force: true });
     const token = await exchangeMetaCode(code);
     if (!token.ok) return done(`Could not finish the sign-in: ${token.error}`);
 

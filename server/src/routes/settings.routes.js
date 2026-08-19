@@ -8,6 +8,7 @@ import { CONVERSION_MODES, CONVERSION_ROLES } from '../models/Settings.js';
 import Domain from '../models/Domain.js';
 import config from '../config/env.js';
 import { sendTelegram, telegramEnabled } from '../services/telegram.service.js';
+import { metaRedirectUri } from '../services/meta.service.js';
 import { newApiKey } from '../utils/ids.js';
 import { str, num, bool, isObjectId, badRequest, notFound, oneOf } from '../utils/validate.js';
 
@@ -18,7 +19,15 @@ router.get(
   '/settings',
   asyncRoute(async (req, res) => {
     const settings = await getSettings({ force: true });
-    res.json({ ...settings, telegramConfigured: telegramEnabled() });
+    // Write-only, like every other stored credential: the form is told one is
+    // held so it can show a placeholder, never the value itself.
+    const { metaAppSecret, ...safe } = settings;
+    res.json({
+      ...safe,
+      hasMetaAppSecret: !!metaAppSecret,
+      metaRedirectUri: metaRedirectUri(),
+      telegramConfigured: telegramEnabled(),
+    });
   })
 );
 
@@ -47,6 +56,12 @@ router.put(
       patch.reportTimezone = tz;
     }
     if (b.telegramEnabled !== undefined) patch.telegramEnabled = bool(b.telegramEnabled, true);
+    if (b.metaAppId !== undefined) patch.metaAppId = str(b.metaAppId, 64);
+    // An empty secret means "leave the stored one alone", not "clear it" - the
+    // form cannot send back what it was never given.
+    if (typeof b.metaAppSecret === 'string' && b.metaAppSecret.trim()) {
+      patch.metaAppSecret = str(b.metaAppSecret, 128);
+    }
 
     /** Blank rows are how the operator removes an event, so they are dropped here. */
     const cleanType = (t) => ({
@@ -77,7 +92,13 @@ router.put(
     }
 
     const saved = await updateSettings(patch);
-    res.json({ ...saved, telegramConfigured: telegramEnabled() });
+    const { metaAppSecret, ...safe } = saved;
+    res.json({
+      ...safe,
+      hasMetaAppSecret: !!metaAppSecret,
+      metaRedirectUri: metaRedirectUri(),
+      telegramConfigured: telegramEnabled(),
+    });
   })
 );
 

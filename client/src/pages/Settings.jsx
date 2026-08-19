@@ -65,6 +65,9 @@ export default function Settings() {
         rawClickRetentionDays: Number(settings.rawClickRetentionDays),
         reportTimezone: settings.reportTimezone,
         telegramEnabled: settings.telegramEnabled,
+        metaAppId: settings.metaAppId || '',
+        // Blank means "keep the stored one" - it is never sent back to us
+        metaAppSecret: settings.metaAppSecret || '',
       });
       setSettings(saved);
       setMsg({ type: 'success', text: 'Settings saved.' });
@@ -207,6 +210,54 @@ export default function Settings() {
                 Bot token {settings.telegramConfigured ? 'is configured in .env' : 'is NOT configured — alerts are skipped'}.
               </div>
             </label>
+
+            {/*
+              Google's consent screen runs on a proxy that already holds its
+              client, so nobody configures Google here. Meta has no such proxy:
+              the app has to be the operator's own, and this is where they say
+              which one - not an environment variable and a restart, which the
+              person holding the Facebook account often cannot reach.
+            */}
+            <div className="section-title" style={{ marginTop: 24 }}>
+              Meta app (for &quot;Connect Meta&quot;)
+            </div>
+            <div className="hint" style={{ marginBottom: 12 }}>
+              Create an app of type <strong>Business</strong> at developers.facebook.com, add the
+              Facebook Login product, and paste this as a Valid OAuth Redirect URI:
+              <div className="mono" style={{ marginTop: 6 }}>
+                {settings.metaRedirectUri || '—'}
+              </div>
+            </div>
+            <div className="field-grid">
+              <label className="field">
+                <span>App ID</span>
+                <input
+                  type="text"
+                  className="mono"
+                  disabled={!isAdmin}
+                  value={settings.metaAppId || ''}
+                  onChange={(e) => setSettings({ ...settings, metaAppId: e.target.value })}
+                  placeholder="1234567890123456"
+                />
+              </label>
+              <label className="field">
+                <span>App secret</span>
+                <input
+                  type="password"
+                  className="mono"
+                  autoComplete="new-password"
+                  disabled={!isAdmin}
+                  value={settings.metaAppSecret || ''}
+                  onChange={(e) => setSettings({ ...settings, metaAppSecret: e.target.value })}
+                  placeholder={settings.hasMetaAppSecret ? '•••••••• (stored)' : 'from the app’s Basic settings'}
+                />
+                <div className="hint">
+                  {settings.hasMetaAppSecret
+                    ? 'A secret is stored. Leave this blank to keep it.'
+                    : 'Stored write-only — it is never shown again.'}
+                </div>
+              </label>
+            </div>
 
             <div className="btn-group">
               <button type="button" className="btn primary" onClick={save} disabled={!isAdmin || saving}>

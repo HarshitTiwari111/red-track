@@ -924,9 +924,10 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
                 <div className="info-note">
                   <LuInfo />
                   <div>
-                    <strong>One-time setup for this install.</strong> RedTrack signs you in through
-                    the Meta app it owns; a tracker you host yourself signs you in through yours, so
-                    it has to exist before the button can open Facebook.
+                    <strong>One-time setup for this install.</strong> Google&apos;s consent screen
+                    runs on a proxy that already holds its client, which is why{' '}
+                    <em>Sign in with Google</em> just opens. Facebook has no such proxy: it will only
+                    open a consent screen for an app it knows, and that app has to be yours.
                     <ol className="rt-steps">
                       <li>
                         At <span className="mono">developers.facebook.com</span> create an app of
@@ -938,10 +939,12 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
                         match character for character.
                       </li>
                       <li>
-                        Copy the app&apos;s <strong>App ID</strong> and{' '}
-                        <strong>App secret</strong> into this install&apos;s environment as{' '}
-                        <span className="mono">META_APP_ID</span> and{' '}
-                        <span className="mono">META_APP_SECRET</span>, then restart it.
+                        Paste the app&apos;s <strong>App ID</strong> and{' '}
+                        <strong>App secret</strong> into{' '}
+                        <a href="/settings" target="_blank" rel="noreferrer">
+                          Settings → Meta app
+                        </a>{' '}
+                        and save. No restart.
                       </li>
                     </ol>
                     <CopyField label="Valid OAuth Redirect URI" value={metaSetup.redirectUri} />
