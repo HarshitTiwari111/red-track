@@ -21,12 +21,21 @@ const decorate = (doc) => {
    * column permanently blank.
    */
   const networkId = doc.networkId || offer?.networkId || null;
+  /*
+   * The traffic channel hangs off the campaign, not the row. A click carries
+   * the channel's name as a snapshot; a conversion does not, so it is looked up
+   * the same way the grid does - or the two would answer differently for the
+   * same record.
+   */
+  const campaign = doc.campaignId ? getCampaignById(doc.campaignId) : null;
+  const channel = campaign?.trafficSourceId ? getSource(campaign.trafficSourceId) : null;
   return {
     ...doc,
-    campaignName: doc.campaignId ? getCampaignById(doc.campaignId)?.name || '' : '',
+    campaignName: campaign?.name || '',
     offerName: offer?.name || '',
     networkName: networkId ? getNetworkById(networkId)?.name || '' : '',
     landerName: doc.landerId ? getLander(doc.landerId)?.name || '' : '',
+    sourceName: channel?.name || '',
   };
 };
 
