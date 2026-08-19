@@ -46,10 +46,12 @@ export const blankNetwork = () => ({
   postbackSecurityKey: newSecurityKey(),
   currency: 'USD',
   offerUrlTemplate: '',
-  params: [
-    { param: 'clickid', macro: '', name: 'Click ID', role: 'clickid' },
-    { param: 'payout', macro: '', name: 'Payout', role: 'payout' },
-  ],
+  /*
+   * Empty, so the postback URL starts as the bare endpoint and grows as the
+   * parameters below are filled in. Pre-filling them produced a URL that looked
+   * finished before anyone had said what their network actually sends.
+   */
+  params: [],
   paramMapping: { clickid: 'clickid', payout: 'payout', txid: 'txid', status: 'status', type: 'type' },
   defaultConversionStatus: 'approved',
   clickExpiration: { enabled: false, days: 0 },
@@ -140,7 +142,6 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
     push('txid', '{txid}');
     push('status', '{status}');
     push('type', '{type}');
-    if (!parts.length) parts.push('clickid={clickid}', 'payout={payout}');
     /*
      * The key is only carried when this source insists on it. Without it the
      * tracker still knows which source a postback belongs to - the click id
@@ -151,7 +152,8 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
     if (value.postbackProtection?.enabled) {
       parts.push(`key=${value.postbackSecurityKey || '<security-key>'}`);
     }
-    return `${origin}/postback?${parts.join('&')}`;
+    // Nothing configured yet means the bare endpoint, not one trailing a "?"
+    return parts.length ? `${origin}/postback?${parts.join('&')}` : `${origin}/postback`;
   };
 
   // Two rows is what a source usually needs; the rest are there when asked for.

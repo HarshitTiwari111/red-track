@@ -1,7 +1,13 @@
 import express from 'express';
 import Click from '../models/Click.js';
 import config from '../config/env.js';
-import { getCampaignBySlug, getOffer, getCampaignById, getNetworkByKey } from '../services/cache.service.js';
+import {
+  getCampaignBySlug,
+  getOffer,
+  getCampaignById,
+  getNetworkByKey,
+  clickIdParamNames,
+} from '../services/cache.service.js';
 import { buildClick, persistClick, logClickError, CLICK_COOKIE, SUBS } from '../services/click.service.js';
 import { selectOffer } from '../services/rotation.service.js';
 import { replaceMacros, buildMacroContext } from '../services/macro.service.js';
@@ -201,8 +207,24 @@ router.get('/postback', async (req, res) => {
       return req.query[mapped || canonical] ?? req.query[canonical];
     };
 
+    /*
+     * Without a key there is no source yet, so no renamed parameters to honour.
+     * The click id still has to be found, or nothing downstream can resolve -
+     * so it is looked for under every name any source uses. Everything else is
+     * re-read once the click has named the source it belongs to.
+     */
+    let clickid = pick('clickid') ?? req.query.cid ?? req.query.click_id;
+    if (!clickid && !network) {
+      for (const name of clickIdParamNames()) {
+        if (req.query[name]) {
+          clickid = req.query[name];
+          break;
+        }
+      }
+    }
+
     const result = await recordConversion({
-      clickid: pick('clickid') ?? req.query.cid ?? req.query.click_id,
+      clickid,
       payout: pick('payout') ?? req.query.amount ?? req.query.sum,
       txid: pick('txid') ?? req.query.transaction_id,
       status: pick('status'),

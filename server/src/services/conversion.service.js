@@ -121,15 +121,6 @@ export async function recordConversion({
     return { ok: false, reason: 'missing clickid' };
   }
 
-  // --- per-network guards ------------------------------------------------------
-  if (network?.whitelistedIps?.enabled) {
-    const allowed = network.whitelistedIps.ips || [];
-    if (allowed.length && !allowed.includes(ip)) {
-      log({ ok: false, reason: `ip ${ip} not whitelisted`, clickid: cid, networkId: network._id });
-      return { ok: false, reason: 'ip not allowed' };
-    }
-  }
-
   const click = await Click.findOne({ clickid: cid }).lean();
   if (!click) {
     log({ ok: false, reason: 'unknown clickid', clickid: cid });
@@ -143,36 +134,65 @@ export async function recordConversion({
     source: click.source || '',
   });
 
+  const offer = click.offerId ? getOffer(click.offerId) : null;
+  const networkId = network?._id || offer?.networkId || null;
+
+  /*
+   * A postback with no valid key still reaches here, because the key is optional
+   * by default. The click has now named the offer, and the offer its source, so
+   * from this point the source IS known even though the URL never said so.
+   */
+  const owner = network || (networkId ? getNetworkById(networkId) : null);
+
+  /*
+   * --- the offer source's own guards ---
+   *
+   * All three run off `owner`, not off the key. A source protects itself the
+   * same whether or not its postback happens to name it, and the key is not
+   * carried by default - reading these off the key alone would have made every
+   * one of them silently optional.
+   */
+  if (!network && owner?.postbackProtection?.enabled) {
+    log({ ok: false, reason: 'security key required by this offer source', clickid: cid, networkId });
+    return { ok: false, reason: 'security key required' };
+  }
+
+  if (owner?.whitelistedIps?.enabled) {
+    const allowed = owner.whitelistedIps.ips || [];
+    if (allowed.length && !allowed.includes(ip)) {
+      log({ ok: false, reason: `ip ${ip} not whitelisted`, clickid: cid, networkId });
+      return { ok: false, reason: 'ip not allowed' };
+    }
+  }
+
   // Attribution window: a conversion arriving long after the click is not ours
-  if (network?.clickExpiration?.enabled && network.clickExpiration.days > 0 && click.ts) {
+  if (owner?.clickExpiration?.enabled && owner.clickExpiration.days > 0 && click.ts) {
     const ageDays = (Date.now() - new Date(click.ts).getTime()) / 86400000;
-    if (ageDays > network.clickExpiration.days) {
+    if (ageDays > owner.clickExpiration.days) {
       log({
         ok: false,
-        reason: `click expired (${Math.floor(ageDays)}d > ${network.clickExpiration.days}d)`,
+        reason: `click expired (${Math.floor(ageDays)}d > ${owner.clickExpiration.days}d)`,
         clickid: cid,
-        networkId: network._id,
+        networkId,
       });
       return { ok: false, reason: 'click expired' };
     }
   }
 
-  const offer = click.offerId ? getOffer(click.offerId) : null;
-  const networkId = network?._id || offer?.networkId || null;
-
-  /* A postback with no valid key still reaches here, because the key is optional
-   * by default. If the offer's own network demands protection, refuse it. */
-  if (!network && networkId) {
-    const owner = getNetworkById(networkId);
-    if (owner?.postbackProtection?.enabled) {
-      log({
-        ok: false,
-        reason: 'security key required by this offer source',
-        clickid: cid,
-        networkId,
-      });
-      return { ok: false, reason: 'security key required' };
-    }
+  /*
+   * The route could only read the well known spellings without a key. Now that
+   * the source is known, anything it renamed is read under its own name - so a
+   * network sending `amount=` instead of `payout=` is understood whether or not
+   * its postback carried the key.
+   */
+  if (!network && owner) {
+    const m = owner.paramMapping || {};
+    const under = (canonical) => (m[canonical] ? rawQuery?.[m[canonical]] : undefined);
+    const blank = (v) => v === undefined || v === null || v === '';
+    if (blank(payout)) payout = under('payout');
+    if (blank(txid)) txid = under('txid');
+    if (blank(status)) status = under('status');
+    if (blank(type)) type = under('type');
   }
 
   /*
@@ -315,14 +335,14 @@ export async function recordConversion({
       // postback-side values
       convSubs: extractConvSubs(rawQuery),
       postbackIp: ip,
-      event: str(roleValue(network, 'event', rawQuery) ?? rawQuery?.event, 80),
-      coupon: str(roleValue(network, 'coupon', rawQuery) ?? rawQuery?.coupon, 80),
+      event: str(roleValue(owner, 'event', rawQuery) ?? rawQuery?.event, 80),
+      coupon: str(roleValue(owner, 'coupon', rawQuery) ?? rawQuery?.coupon, 80),
       refId: str(
-        roleValue(network, 'refid', rawQuery) ?? rawQuery?.ref_id ?? rawQuery?.refid ?? rawQuery?.ref,
+        roleValue(owner, 'refid', rawQuery) ?? rawQuery?.ref_id ?? rawQuery?.refid ?? rawQuery?.ref,
         120
       ),
       publisherRevenue: num(
-        roleValue(network, 'pubrevenue', rawQuery) ?? rawQuery?.pub_revenue ?? rawQuery?.publisher_revenue,
+        roleValue(owner, 'pubrevenue', rawQuery) ?? rawQuery?.pub_revenue ?? rawQuery?.publisher_revenue,
         0
       ),
       rawQuery,

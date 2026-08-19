@@ -136,6 +136,21 @@ export const getLander = (id) => cache.landers.get(String(id));
 export const listOffers = () => [...cache.offers.values()];
 export const getSource = (id) => cache.sources.get(String(id));
 export const getNetworkByKey = (key) => cache.networksByKey.get(String(key));
+/**
+ * Every parameter name any offer source expects its click id under. A postback
+ * arriving without a security key cannot say which source it came from, so the
+ * click id has to be looked for under all of them before the click - and
+ * through it the source - can be found at all.
+ */
+export const clickIdParamNames = () => {
+  const names = new Set();
+  for (const n of cache.networksById.values()) {
+    const mapped = n?.paramMapping?.clickid;
+    if (mapped) names.add(mapped);
+    for (const p of n?.params || []) if (p.role === 'clickid' && p.param) names.add(p.param);
+  }
+  return [...names];
+};
 export const getNetworkById = (id) => cache.networksById.get(String(id));
 export const getDomainByHost = (host) => cache.domainsByHost.get(String(host || '').toLowerCase());
 export const cacheAgeMs = () => (cache.refreshedAt ? Date.now() - cache.refreshedAt : -1);
