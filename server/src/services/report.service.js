@@ -376,18 +376,26 @@ function remapToNetworks(agg) {
   return [...byNetwork.values()];
 }
 
+/*
+ * Deleting a campaign leaves its history behind on purpose, so a report over
+ * last week still adds up. The row has to say something, and a bare database id
+ * says nothing to the person reading it - the id is still on the row's `key`
+ * for anything that needs to follow it.
+ */
+const named = (name, id) => name || (/^[a-f0-9]{24}$/i.test(id) ? '(deleted)' : id);
+
 function labelFor(dim, value) {
   if (value === null || value === undefined || value === '') return '(none)';
   const v = String(value);
   switch (dim) {
     case 'campaign':
-      return getCampaignById(v)?.name || v;
+      return named(getCampaignById(v)?.name, v);
     case 'offer':
-      return getOffer(v)?.name || v;
+      return named(getOffer(v)?.name, v);
     case 'lander':
-      return getLander(v)?.name || v;
+      return named(getLander(v)?.name, v);
     case 'network':
-      return getNetworkById(v)?.name || v;
+      return named(getNetworkById(v)?.name, v);
     case 'source':
       return v;
     default:
