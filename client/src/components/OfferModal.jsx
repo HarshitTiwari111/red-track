@@ -88,9 +88,14 @@ export default function OfferModal({ value, networks, knownTags = [], onChange, 
       ...(untouched && next?.offerUrlTemplate ? { url: next.offerUrlTemplate } : {}),
     });
   };
-  const postbackUrl = network
-    ? `${window.location.origin}/postback?clickid={clickid}&payout={payout}&txid={txid}&status={status}&key=${network.postbackSecurityKey}`
-    : `${window.location.origin}/postback?clickid={clickid}&payout={payout}&txid={txid}&status={status}`;
+  /*
+   * The key rides along only when the source insists on one - the same rule the
+   * offer source's own screen follows, so the two never hand out URLs that
+   * disagree about what a network is supposed to send.
+   */
+  const postbackUrl =
+    `${window.location.origin}/postback?clickid={clickid}&payout={payout}&txid={txid}&status={status}` +
+    (network?.postbackProtection?.enabled ? `&key=${network.postbackSecurityKey}` : '');
 
   /** Insert a macro at the caret so operators do not hand-type them. */
   const insertMacro = (m) => {
