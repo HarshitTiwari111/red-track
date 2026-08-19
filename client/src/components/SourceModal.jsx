@@ -192,8 +192,6 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
   // Whether the proxy can run a Google sign-in. Until it can, the refresh
   // token has to be supplied by hand, so the panel offers a field instead.
   const [googleSignIn, setGoogleSignIn] = useState(true);
-  const [metaSignIn, setMetaSignIn] = useState(false);
-  const [metaRedirectUri, setMetaRedirectUri] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState(null);
   const origin = window.location.origin;
@@ -205,15 +203,8 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
       .catch(() => setMacros([]));
     api
       .get('/integrations/config')
-      .then((r) => {
-        setGoogleSignIn(!!r.data.googleSignIn);
-        setMetaSignIn(!!r.data.metaSignIn);
-        setMetaRedirectUri(r.data.metaRedirectUri || '');
-      })
-      .catch(() => {
-        setGoogleSignIn(false);
-        setMetaSignIn(false);
-      });
+      .then((r) => setGoogleSignIn(!!r.data.googleSignIn))
+      .catch(() => setGoogleSignIn(false));
   }, []);
 
   const set = (patch) => onChange({ ...value, ...patch });
@@ -857,63 +848,27 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
               </span>
             </div>
             <div className="rt-card-body">
-              <div className="field-row">
-                <Field label="Ad account ID">
-                  <input
-                    type="text"
-                    className="mono"
-                    value={integration.adAccountId}
-                    onChange={(e) => setIntegration({ adAccountId: e.target.value })}
-                    placeholder="1234567890"
-                  />
-                </Field>
-                <Field label="Access token">
-                  <input
-                    type="password"
-                    className="mono"
-                    autoComplete="new-password"
-                    value={integration.accessToken || ''}
-                    onChange={(e) => setIntegration({ accessToken: e.target.value })}
-                    placeholder={integration.hasToken ? '••••••••••••' : 'EAAG…'}
-                  />
-                </Field>
-              </div>
-
               {/*
-                With an app configured this opens Facebook's own consent screen
-                and the account comes back with the grant. Without one there is
-                nothing to open, so the button falls back to checking whatever
-                was typed above - and the note below says what is missing.
+                One button, the way RedTrack has it.
+                The ad account and the token are what the sign-in RETURNS, not
+                what anyone types - asking for them up front made the operator
+                go hunting in Business Settings for something Facebook hands
+                over on its own, and made an empty field the reason a connect
+                attempt failed. Whatever is wrong now comes back as a sentence
+                under the button instead.
               */}
               <button
                 type="button"
                 className="brand-btn"
-                onClick={metaSignIn ? signInWithMeta : verify}
+                onClick={signInWithMeta}
                 disabled={!value._id || verifying}
-                title={
-                  !value._id
-                    ? 'Save the channel first'
-                    : metaSignIn
-                      ? 'Sign in with Facebook'
-                      : 'Check the typed credentials against Meta'
-                }
+                title={!value._id ? 'Save the channel first' : 'Sign in with Facebook'}
               >
                 {verifying ? <span className="spinner" /> : <SiMeta className="brand-mark-meta" />}
                 Connect Meta
               </button>
 
               {verifyAlert}
-
-              {!metaSignIn && (
-                <div className="rt-hint">
-                  Signing in with Facebook needs an app of your own. Create one at{' '}
-                  <span className="mono">developers.facebook.com</span>, add{' '}
-                  <span className="mono">{metaRedirectUri || '…/api/v1/integrations/meta/callback'}</span> as a valid
-                  OAuth redirect URI, then set <span className="mono">META_APP_ID</span> and{' '}
-                  <span className="mono">META_APP_SECRET</span> on this install. Until then, paste an access token from
-                  Business Settings above and this button checks it.
-                </div>
-              )}
 
               {/*
                 Its own row, under the button, the way RedTrack lays it out -
