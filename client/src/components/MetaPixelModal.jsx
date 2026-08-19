@@ -75,6 +75,33 @@ export default function MetaPixelModal({ value, onChange, onClose, onSave, savin
       .catch(() => setConversionTypes(['conversion', 'sale', 'lead', 'signup', 'deposit']));
   }, []);
 
+  /*
+   * Editing an existing pixel: fetch the keys it holds so the form shows what is
+   * stored. Lists never carry them, so this is the one place they are asked for,
+   * and only for the pixel actually being edited.
+   */
+  const pixelId = value._id;
+  useEffect(() => {
+    if (!pixelId) return;
+    let live = true;
+    api
+      .get(`/meta-pixels/${pixelId}/secret`)
+      .then(({ data }) => {
+        if (!live) return;
+        onChange((prev) => ({
+          ...prev,
+          // never overwrite something already being typed
+          apiKey: prev.apiKey || data.apiKey || '',
+          dataQualityToken: prev.dataQualityToken || data.dataQualityToken || '',
+        }));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pixelId]);
+
   const set = (patch) => onChange({ ...value, ...patch });
 
   const rules = value.payoutRules || [];
@@ -168,13 +195,16 @@ export default function MetaPixelModal({ value, onChange, onClose, onSave, savin
           />
         </Field>
         <Field>
+          {/* Shown, not masked: an operator has to be able to tell a right key
+              from a wrong one, and to copy back out the one already stored. */}
           <input
-            type="password"
+            type="text"
             className="mono"
-            autoComplete="new-password"
+            autoComplete="off"
+            spellCheck={false}
             value={value.apiKey}
             onChange={(e) => set({ apiKey: e.target.value })}
-            placeholder={value.hasApiKey ? '••••••••••••' : 'Conversions API key *'}
+            placeholder="Conversions API key *"
           />
         </Field>
         <Field>
@@ -219,12 +249,13 @@ export default function MetaPixelModal({ value, onChange, onClose, onSave, savin
         </Field>
         <Field>
           <input
-            type="password"
+            type="text"
             className="mono"
-            autoComplete="new-password"
+            autoComplete="off"
+            spellCheck={false}
             value={value.dataQualityToken}
             onChange={(e) => set({ dataQualityToken: e.target.value })}
-            placeholder={value.hasDataQualityToken ? '••••••••••••' : 'Data Quality API Token'}
+            placeholder="Data Quality API Token"
           />
         </Field>
         <button type="button" className="add-more" onClick={() => setShowPayout((s) => !s)}>

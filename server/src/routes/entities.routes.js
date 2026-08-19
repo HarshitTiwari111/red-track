@@ -212,6 +212,24 @@ const normalizeMetaPixel = async (body, existing = null) => {
 };
 
 /**
+ * The keys held on one pixel, for its own edit form.
+ *
+ * Every other route strips these, so a list of pixels never carries anybody's
+ * credentials. Asking for one at a time is what lets the form show what is
+ * stored - without it an operator cannot tell a right key from a wrong one, and
+ * cannot copy the one they already have back out.
+ */
+router.get(
+  '/meta-pixels/:id/secret',
+  asyncRoute(async (req, res) => {
+    if (!isObjectId(req.params.id)) throw badRequest('Invalid id');
+    const pixel = await MetaPixel.findOne({ _id: req.params.id, ...ownerFilter(req) }).lean();
+    if (!pixel) throw notFound('Pixel not found');
+    res.json({ apiKey: pixel.apiKey || '', dataQualityToken: pixel.dataQualityToken || '' });
+  })
+);
+
+/**
  * Event Match Quality for one pixel. Declared before the CRUD router below, or
  * that router would claim the path as an id and answer 404.
  */
