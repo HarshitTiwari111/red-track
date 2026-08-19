@@ -393,6 +393,13 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
               ))}
             </select>
           </div>
+          {/* Both settings above describe a cost pull that does not run yet.
+              They are kept so connecting one later needs no re-setup, but
+              nothing acts on them today and the screen should say so. */}
+          <div className="rt-hint">
+            Both are stored for a future automatic cost pull — nothing fetches spend from the ad
+            platform yet, so neither has any effect. Enter cost under Campaigns → Update costs.
+          </div>
 
           <Field label="Currency">
             <select value={value.currency} onChange={(e) => set({ currency: e.target.value })}>
@@ -826,9 +833,15 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
 
               {verifyAlert}
 
-              <label className="switch" style={{ marginTop: 18 }}>
+              {/*
+                Disabled on purpose. The setting only means anything to a cost
+                pull, and this install has none - a switch that saves and then
+                changes nothing is worse than one that says why it is off.
+              */}
+              <label className="switch" style={{ marginTop: 18, opacity: 0.55 }}>
                 <input
                   type="checkbox"
+                  disabled
                   checked={!!integration.impressionCostSync}
                   onChange={(e) => setIntegration({ impressionCostSync: e.target.checked })}
                 />
@@ -839,10 +852,10 @@ export default function SourceModal({ value, onChange, onClose, onSave, saving, 
               <div className="info-note">
                 <LuInfo />
                 <div>
-                  Use when campaign/ad set/ad has impressions and spend but no clicks.
-                  <br />
-                  To keep spend consistent, the system records one system (dummy) click and assigns
-                  the cost to it.
+                  <strong>Not available yet.</strong> This tells an automatic cost pull what to do
+                  with spend that has impressions but no clicks — record one system click and hang
+                  the cost off it. Nothing pulls cost from Meta yet, so the switch has nothing to
+                  act on. Enter cost by hand under Campaigns → Update costs in the meantime.
                 </div>
               </div>
             </div>
