@@ -67,6 +67,8 @@ export const networkToForm = (n) => {
 
 export default function NetworkModal({ value, onChange, onClose, onSave, saving, error }) {
   const [showAllParams, setShowAllParams] = useState(false);
+  // null = follow whatever the parameters below produce; a string = hand-edited
+  const [urlDraft, setUrlDraft] = useState(null);
   const origin = window.location.origin;
 
   const set = (patch) => onChange({ ...value, ...patch });
@@ -175,9 +177,29 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
             </Field>
           </div>
 
-          <CopyField label="Postback URL" value={postbackUrl()} />
+          {/*
+            Editable, because networks ask for the URL in shapes this cannot
+            guess - an extra parameter of their own, a macro spelled their way.
+            It is a scratchpad: the tracker accepts whatever arrives at
+            /postback with a valid key, so nothing here is stored. Left alone it
+            follows the parameters below, and Reset brings it back to that.
+          */}
+          <CopyField
+            label="Postback URL"
+            value={urlDraft ?? postbackUrl()}
+            readOnly={false}
+            onChange={setUrlDraft}
+          />
           <div className="rt-hint">
-            Build your postback URL here and copy it to your affiliate network&apos;s account
+            Build your postback URL here and copy it to your affiliate network&apos;s account.
+            {urlDraft !== null && (
+              <>
+                {' '}
+                <button type="button" className="link-plain" onClick={() => setUrlDraft(null)}>
+                  Reset to the generated one
+                </button>
+              </>
+            )}
           </div>
 
           <Field label="Currency">

@@ -34,7 +34,9 @@ export default function CopyField({ value, label, readOnly = true, onChange }) {
           value={value || ''}
           readOnly={readOnly}
           onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-          onFocus={(e) => e.target.select()}
+          // Selecting the lot on focus suits a value you can only copy; on an
+          // editable one it would swallow the click meant to place the cursor.
+          onFocus={readOnly ? (e) => e.target.select() : undefined}
         />
         <button type="button" className="btn sm" onClick={copy} style={{ minWidth: 66 }}>
           {copied ? '✓ Copied' : 'Copy'}
