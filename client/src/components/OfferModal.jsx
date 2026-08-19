@@ -4,6 +4,7 @@ import { SiMeta } from 'react-icons/si';
 import Modal from './Modal.jsx';
 import Field, { Switch, ChipList } from './Field.jsx';
 import CapiPixelPicker from './CapiPixelPicker.jsx';
+import { buildPostbackUrl } from './NetworkModal.jsx';
 
 const TABS = [
   { id: 'main', label: 'Main' },
@@ -89,13 +90,11 @@ export default function OfferModal({ value, networks, knownTags = [], onChange, 
     });
   };
   /*
-   * The key rides along only when the source insists on one - the same rule the
-   * offer source's own screen follows, so the two never hand out URLs that
-   * disagree about what a network is supposed to send.
+   * Built from the source that was picked above, by the same function its own
+   * screen uses. A URL invented here would show parameters the source has not
+   * been told about, which is worse than showing none.
    */
-  const postbackUrl =
-    `${window.location.origin}/postback?clickid={clickid}&payout={payout}&txid={txid}&status={status}` +
-    (network?.postbackProtection?.enabled ? `&key=${network.postbackSecurityKey}` : '');
+  const postbackUrl = buildPostbackUrl(network);
 
   /** Insert a macro at the caret so operators do not hand-type them. */
   const insertMacro = (m) => {
@@ -268,8 +267,8 @@ export default function OfferModal({ value, networks, knownTags = [], onChange, 
             <input type="text" className="mono" readOnly value={postbackUrl} onFocus={(e) => e.target.select()} />
             <div className="rt-hint">
               {network
-                ? `Give this to ${network.name}. The security key is theirs alone.`
-                : 'Pick an offer source above to include its security key.'}
+                ? `The URL ${network.name} sends conversions to. Its parameters come from that offer source — change them there.`
+                : 'Pick an offer source above to build this.'}
             </div>
           </Field>
 

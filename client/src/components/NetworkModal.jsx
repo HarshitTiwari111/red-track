@@ -40,6 +40,44 @@ const newSecurityKey = () => {
   return [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
 };
 
+/**
+ * Our own macros, used only while a source has not said what its network
+ * substitutes. They mark the spot for whoever copies the URL; a source saved
+ * before these fields held tokens still reads the way it always did.
+ */
+const PLACEHOLDER = {
+  clickid: '{clickid}',
+  payout: '{payout}',
+  txid: '{txid}',
+  status: '{status}',
+  type: '{type}',
+};
+
+/**
+ * The URL an affiliate network is handed for a source. Left of each `=` is the
+ * parameter this tracker reads; right of it is the token the network
+ * substitutes - the postback is sent BY the network, so the value can only be
+ * something the network knows how to fill in.
+ *
+ * One function, because the offer screen shows this same URL and the two
+ * drifting apart is how an operator ends up pasting one that no longer matches
+ * what the source expects.
+ */
+export function buildPostbackUrl(network, origin = window.location.origin) {
+  const parts = [];
+  for (const p of network?.params || []) {
+    if (!p.param) continue;
+    const token = p.macro || PLACEHOLDER[p.role];
+    if (token) parts.push(`${p.param}=${token}`);
+  }
+  // The key rides along only where the source refuses postbacks without one
+  if (network?.postbackProtection?.enabled) {
+    parts.push(`key=${network.postbackSecurityKey || '<security-key>'}`);
+  }
+  // Nothing configured yet means the bare endpoint, not one trailing a "?"
+  return parts.length ? `${origin}/postback?${parts.join('&')}` : `${origin}/postback`;
+}
+
 export const blankNetwork = () => ({
   name: '',
   aliasName: '',
@@ -135,35 +173,7 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
     set({ params: [...value.params, { param: '', macro: '', name: '', role: '', ...patch }] });
   };
 
-  /**
-   * The URL the affiliate network is given. Left of each `=` is the parameter
-   * this tracker reads; right of it is the token the network substitutes. That
-   * is the way round it has to be - the postback is sent BY the network, so the
-   * value can only ever be something the network knows how to fill in.
-   */
-  const postbackUrl = () => {
-    const parts = [];
-    for (const role of ['clickid', 'payout']) {
-      const macro = roleMacro(role);
-      if (macro) parts.push(`${CANONICAL[role]}=${macro}`);
-    }
-    for (const p of value.params) {
-      if (p.role === 'clickid' || p.role === 'payout') continue;
-      if (p.param && p.macro) parts.push(`${p.param}=${p.macro}`);
-    }
-    /*
-     * The key is only carried when this source insists on it. Without it the
-     * tracker still knows which source a postback belongs to - the click id
-     * leads to the click, the click to the offer, and the offer to its source -
-     * so pasting a key into a network's account by default only gives one more
-     * thing to get wrong.
-     */
-    if (value.postbackProtection?.enabled) {
-      parts.push(`key=${value.postbackSecurityKey || '<security-key>'}`);
-    }
-    // Nothing configured yet means the bare endpoint, not one trailing a "?"
-    return parts.length ? `${origin}/postback?${parts.join('&')}` : `${origin}/postback`;
-  };
+  const postbackUrl = () => buildPostbackUrl(value, origin);
 
   // Two rows is what a source usually needs; the rest are there when asked for.
   const visibleExtras = showAllParams ? padded : padded.slice(0, 2);
