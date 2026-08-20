@@ -485,7 +485,7 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
             Whitelisted IPs
             <LuCircleHelp
               className="head-help"
-              title="If you want to receive conversions only from certain IPs, add those IPs here."
+              title="If you want to receive conversions only from certain IPs, add those IPs here. One per line — ask the network which addresses its postbacks come from."
             />
           </span>
         </div>
@@ -513,7 +513,9 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
                     },
                   })
                 }
-                placeholder={'203.0.113.10\n198.51.100.7'}
+                /* No sample addresses: greyed-out IPs in an empty box read as
+                   a list already in force, and this one refuses postbacks.
+                   The format lives in the help mark above, as RedTrack has it. */
               />
             </Field>
           </div>
