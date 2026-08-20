@@ -283,22 +283,25 @@ export default function NetworkModal({ value, onChange, onClose, onSave, saving,
           {/* The two a postback cannot work without. Each holds the token the
               network puts the value in; everything optional lives in the grid
               below. */}
-          <Field label="CLICKID">
+          {/* The name sits inside the empty box, the way RedTrack has it - a
+              label above and a macro example inside read as a filled-in
+              field, and people left both alone thinking they were set. */}
+          <Field>
             <input
               type="text"
               className="mono"
               value={roleMacro('clickid')}
               onChange={(e) => setRoleMacro('clickid', e.target.value, 'Click ID')}
-              placeholder="#s1#"
+              placeholder="CLICKID"
             />
           </Field>
-          <Field label="SUM">
+          <Field>
             <input
               type="text"
               className="mono"
               value={roleMacro('payout')}
               onChange={(e) => setRoleMacro('payout', e.target.value, 'Payout')}
-              placeholder="#payout#"
+              placeholder="SUM"
             />
           </Field>
           <div className="rt-hint">
