@@ -11,7 +11,31 @@ import { startJobs, isCronLeader } from './jobs/index.js';
 import { notifyError } from './services/telegram.service.js';
 import { createApp } from './app.js';
 
+/**
+ * Refuse to run in production on the fallback secret.
+ *
+ * The default exists so a fresh clone starts without configuration, which is
+ * right for development and catastrophic in production: anyone who has read
+ * this repository can sign a token for any user, including an admin. It is the
+ * single misconfiguration that hands over the whole install, and it leaves no
+ * trace in the logs - so the process stops rather than warns.
+ */
+function assertSecrets() {
+  if (!config.isProd) return;
+  const weak = !config.jwtSecret || config.jwtSecret === 'kap-tracker-insecure-default';
+  if (weak) {
+    logger.error(
+      'JWT_SECRET is unset or still the built-in default. Set a long random value in .env and restart.'
+    );
+    process.exit(1);
+  }
+  if (config.jwtSecret.length < 32) {
+    logger.warn('JWT_SECRET is shorter than 32 characters - use a longer random value.');
+  }
+}
+
 async function main() {
+  assertSecrets();
   await connectDb();
   await ensureIndexes();
   // Same rule as cron: one instance does the shared work, not every worker

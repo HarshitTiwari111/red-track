@@ -282,6 +282,20 @@ was chosen and why, and how to change it where that matters.
 | L4 | The postback failure threshold is **>10 failures in 5 minutes**, checked every 5 minutes. |
 | L5 | Telegram is optional everywhere. With no token configured, every send returns `{skipped: true}` and nothing errors. Alerts are throttled to one per key per minute so an error storm cannot flood the chat. |
 
+## Security
+
+| # | Assumption |
+|---|---|
+| S1 | The login limiter counts **5 failed attempts per 5 minutes per IP, across the whole install**. Counters live in `rate_limits` in MongoDB, not process memory, so cluster workers and load-balanced instances share one number and a restart does not clear it. Successful logins return their attempt (`skipSuccessfulRequests`), so a user who remembers their password is never locked out. |
+| S2 | The server **refuses to start in production** if `JWT_SECRET` is unset or still the built-in default, and warns below 32 characters. A weak signing key forges any session, including an admin's, and leaves no trace — a warning nobody reads is not enough. |
+| S3 | Content-Security-Policy is written explicitly rather than left to helmet's default. `style-src` must keep `'unsafe-inline'`: React renders `style={{...}}` as an inline style attribute and the dashboard uses them throughout. `script-src` is `'self'` with no exceptions — the Vite build emits no inline script. `img-src`/`font-src` allow `data:` for the inline SVG favicon. |
+| S4 | HSTS is sent **only in production**. `crossOriginEmbedderPolicy` is off and `crossOriginResourcePolicy` is `cross-origin`, because third-party landers load `/track.js` and `/pixel.gif` from this host. |
+| S5 | Every write through `crudRouter` writes an **audit row** — create, update, delete, for every entity, because that factory is the one place they all pass through. Updates store only the fields that changed, and only their new value: the previous value is already the previous row. |
+| S6 | The audit log **redacts secrets at any depth**, not just the top level (`integration.accessToken` is the case that matters). The field name is still recorded, so the change is visible without the value. Nothing redacts this collection on read, which is why it must never receive a secret in the first place. |
+| S7 | `GET /logs/audit` is **admin only** — not because the rows are secret, but because reading them reveals which accounts exist and when each is active. |
+| S8 | A sign-in from a **device not seen before** sends a Telegram alert. "Device" is the IP's /24 (IPv6: the /64 prefix) plus browser and OS — a home connection moves within its block, and an alert on every DHCP lease is an alert that gets ignored. Known devices are silent. |
+| S9 | Failed logins are recorded with the **email that was tried, even when no such account exists** — a run of failures against an unregistered address is what a credential list being tried looks like, and it is invisible if only real users are logged. |
+
 ## Deliberately not built
 
 Out of scope for a single-company self-hosted tracker, and not requested:

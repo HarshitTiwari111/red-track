@@ -2,7 +2,9 @@ import express from 'express';
 import Click from '../models/Click.js';
 import Conversion from '../models/Conversion.js';
 import { PostbackLog, ClickErrorLog } from '../models/Logs.js';
+import AuditLog from '../models/AuditLog.js';
 import { asyncRoute } from '../middleware/error.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { updateConversionStatus, addManualConversions } from '../services/conversion.service.js';
 import { getCampaignById, getOffer, getNetworkById, getLander, getSource, listOffers } from '../services/cache.service.js';
 import { clientIp } from '../services/geo.service.js';
@@ -328,6 +330,48 @@ router.get(
       .limit(Math.min(Number(req.query.limit) || 200, 1000))
       .lean();
     res.json({ items, count: items.length });
+  })
+);
+
+/**
+ * Who changed what.
+ *
+ * Admin only, and not because the rows are secret - because a non-admin
+ * reading them learns which accounts exist and when each one is active, which
+ * is the reconnaissance half of an attack on those accounts.
+ */
+router.get(
+  '/logs/audit',
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const tz = getSettingsSync().reportTimezone || 'Asia/Kolkata';
+    const q = {};
+
+    if (req.query.from || req.query.to) {
+      const range = parseRange(req.query.from, req.query.to, tz);
+      q.ts = { $gte: range.utcFrom, $lte: range.utcTo };
+    }
+    if (req.query.action) q.action = str(req.query.action, 32);
+    if (req.query.entity) q.entity = str(req.query.entity, 40);
+    if (req.query.userId && isObjectId(req.query.userId)) q.userId = toObjectId(req.query.userId);
+
+    const search = str(req.query.q, 190);
+    if (search) {
+      const rx = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+      q.$or = [{ userEmail: rx }, { entityName: rx }, { entityId: rx }];
+    }
+
+    const items = await AuditLog.find(q)
+      .sort({ ts: -1 })
+      .limit(Math.min(Number(req.query.limit) || 200, 1000))
+      .lean();
+
+    res.json({
+      items,
+      count: items.length,
+      actions: [...new Set(items.map((d) => d.action).filter(Boolean))].sort(),
+      entities: [...new Set(items.map((d) => d.entity).filter(Boolean))].sort(),
+    });
   })
 );
 

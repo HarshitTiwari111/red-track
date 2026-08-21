@@ -5,6 +5,8 @@ import User from '../models/User.js';
 import { signToken, setAuthCookie, clearAuthCookie, requireAuth } from '../middleware/auth.js';
 import { asyncRoute } from '../middleware/error.js';
 import { MongoRateLimitStore } from '../services/ratelimit.service.js';
+import { recordAudit } from '../services/audit.service.js';
+import { noticeSignIn } from '../services/signin-alert.service.js';
 import { str } from '../utils/validate.js';
 
 const router = express.Router();
@@ -44,12 +46,28 @@ router.post(
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     const user = await User.findOne({ email, active: true });
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    const ok = user ? await bcrypt.compare(password, user.passwordHash) : false;
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!ok) {
+      /*
+       * The email is recorded even when no such user exists - a run of failures
+       * against an address that was never registered is exactly the shape of a
+       * list being tried, and it is invisible if only real users are logged.
+       */
+      recordAudit(req, {
+        action: 'login_failed',
+        entity: 'User',
+        entityId: String(user?._id || ''),
+        entityName: email,
+        note: user ? 'wrong password' : 'no such account',
+      });
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
 
     setAuthCookie(res, signToken(user));
+    // Writes the 'login' audit row itself, stamped with the device, and warns
+    // the operator if this one has not been seen before. Never awaited.
+    noticeSignIn(req, user);
     return res.json({ user: user.toSafeJSON() });
   })
 );

@@ -3,6 +3,7 @@ import { asyncRoute } from '../middleware/error.js';
 import { publishConfigChange } from '../services/cache.service.js';
 import { isObjectId, sanitizeObject, badRequest, notFound, forbidden } from '../utils/validate.js';
 import { ownerFilter, ownerOnCreate, ownsDoc } from '../middleware/scope.js';
+import { recordAudit, diffFields } from '../services/audit.service.js';
 
 /**
  * Generic list/create/read/update/delete router for a Mongoose model.
@@ -21,6 +22,21 @@ export function crudRouter(Model, options = {}) {
   } = options;
 
   const router = express.Router();
+
+  /*
+   * Every entity in this tracker is served by this factory, which makes it the
+   * one place an audit trail can be added without being forgotten on the next
+   * route somebody writes.
+   */
+  const entity = Model.modelName;
+  const audit = (req, action, doc, changes) =>
+    recordAudit(req, {
+      action,
+      entity,
+      entityId: String(doc?._id || ''),
+      entityName: String(doc?.name || doc?.host || ''),
+      changes,
+    });
 
   router.get(
     '/',
@@ -57,7 +73,9 @@ export function crudRouter(Model, options = {}) {
       body.ownerId = ownerOnCreate(req, sanitizeObject(req.body));
       const created = await Model.create(body);
       await afterWrite();
-      res.status(201).json(sanitize(created.toObject()));
+      const plain = created.toObject();
+      audit(req, 'create', plain, diffFields({}, plain));
+      res.status(201).json(sanitize(plain));
     })
   );
 
@@ -68,12 +86,16 @@ export function crudRouter(Model, options = {}) {
       const existing = await Model.findById(req.params.id);
       if (!existing) throw notFound();
       if (!ownsDoc(req, existing)) throw forbidden();
+      // Snapshot before the assign below mutates the loaded document
+      const before = existing.toObject();
       const body = await beforeSave(sanitizeObject(req.body), existing);
       delete body.ownerId; // reassigning an owner is not an edit
       Object.assign(existing, body);
       await existing.save();
       await afterWrite();
-      res.json(sanitize(existing.toObject()));
+      const after = existing.toObject();
+      audit(req, 'update', after, diffFields(before, after));
+      res.json(sanitize(after));
     })
   );
 
@@ -88,6 +110,7 @@ export function crudRouter(Model, options = {}) {
       delete patch.ownerId;
       const updated = await Model.findByIdAndUpdate(req.params.id, { $set: patch }, { new: true }).lean();
       await afterWrite();
+      audit(req, 'update', updated, diffFields(current, updated));
       res.json(sanitize(updated));
     })
   );
@@ -101,6 +124,7 @@ export function crudRouter(Model, options = {}) {
       if (!ownsDoc(req, target)) throw forbidden();
       const deleted = await Model.findByIdAndDelete(req.params.id).lean();
       await afterWrite();
+      audit(req, 'delete', deleted, null);
       res.json({ ok: true, deleted: deleted._id });
     })
   );
