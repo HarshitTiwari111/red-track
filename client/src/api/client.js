@@ -128,6 +128,8 @@ export const settingsApi = {
   get: () => api.get('/settings').then((r) => r.data),
   update: (body) => api.put('/settings', body).then((r) => r.data),
   telegramTest: () => api.post('/settings/telegram-test').then((r) => r.data),
+  // The signed-in user's own account - the only /users route not admin-only
+  updateMe: (body) => api.patch('/users/me', body).then((r) => r.data),
   users: () => api.get('/users').then((r) => r.data.items),
   createUser: (body) => api.post('/users', body).then((r) => r.data),
   updateUser: (id, body) => api.patch(`/users/${id}`, body).then((r) => r.data),

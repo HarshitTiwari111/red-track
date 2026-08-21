@@ -34,17 +34,30 @@ export default function Settings() {
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
   const [newUser, setNewUser] = useState(null);
+  const [account, setAccount] = useState({ name: '', currentPassword: '', password: '', confirm: '' });
+  const [savingAccount, setSavingAccount] = useState(false);
 
+  /*
+   * The user list is fetched only for admins. It used to be part of the same
+   * Promise.all as everything else, and the endpoint refuses a non-admin - so
+   * one 403 rejected the whole batch and a user opening Settings saw no
+   * settings at all, only an error about users they never asked for.
+   */
   const load = useCallback(async () => {
     try {
-      const [s, u, h] = await Promise.all([settingsApi.get(), settingsApi.users(), healthApi()]);
+      const [s, h] = await Promise.all([settingsApi.get(), healthApi()]);
       setSettings(s);
-      setUsers(u);
       setHealth(h);
+      if (isAdmin) settingsApi.users().then(setUsers).catch(() => setUsers([]));
     } catch (err) {
       setMsg({ type: 'error', text: errMsg(err) });
     }
-  }, []);
+  }, [isAdmin]);
+
+  // Seed the account form from whoever is signed in
+  useEffect(() => {
+    if (user) setAccount((a) => ({ ...a, name: user.name || '' }));
+  }, [user]);
 
   useEffect(() => {
     load();
@@ -54,6 +67,36 @@ export default function Settings() {
     if (tab !== 'diagnostics') return;
     logsApi.clickErrors({ limit: 100 }).then(setClickErrors).catch(() => {});
   }, [tab]);
+
+  const saveAccount = async () => {
+    // Caught here rather than at the server so the second field is what gets
+    // blamed, instead of a generic rejection after a round trip
+    if (account.password && account.password !== account.confirm) {
+      setMsg({ type: 'error', text: 'The two new passwords do not match.' });
+      return;
+    }
+    setSavingAccount(true);
+    setMsg(null);
+    try {
+      const body = { name: account.name };
+      if (account.password) {
+        body.currentPassword = account.currentPassword;
+        body.password = account.password;
+      }
+      const res = await settingsApi.updateMe(body);
+      setAccount({ name: res.user.name || '', currentPassword: '', password: '', confirm: '' });
+      setMsg({
+        type: 'success',
+        text: res.signedOutElsewhere
+          ? 'Password changed. Every other session has been signed out.'
+          : 'Account updated.',
+      });
+    } catch (err) {
+      setMsg({ type: 'error', text: errMsg(err) });
+    } finally {
+      setSavingAccount(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -154,12 +197,23 @@ export default function Settings() {
   return (
     <Page title="Settings">
       {msg && <div className={`alert ${msg.type}`}>{msg.text}</div>}
-      {!isAdmin && <div className="alert info">You are signed in as a user — settings are read-only.</div>}
+      {!isAdmin && (
+        <div className="alert info">
+          You are signed in as a user — install settings are read-only, and you see only your own
+          campaigns, offers and reports. Your own account is yours to change under My account.
+        </div>
+      )}
 
+      {/*
+        Managing users is an admin's job, so the tab is not offered to anyone
+        else. It used to be, and it opened an empty table - the list endpoint
+        refuses a non-admin, which reads as something broken rather than
+        something not theirs.
+      */}
       <div className="tabs">
-        {['general', 'filters', 'users', 'diagnostics'].map((t) => (
+        {['general', 'filters', ...(isAdmin ? ['users'] : []), 'account', 'diagnostics'].map((t) => (
           <button key={t} type="button" className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
-            {t[0].toUpperCase() + t.slice(1)}
+            {t === 'account' ? 'My account' : t[0].toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -355,6 +409,73 @@ export default function Settings() {
             <span className="mono">X-Api-Key</span> header.
           </div>
         </>
+      )}
+
+      {tab === 'account' && (
+        <div className="panel">
+          <div className="panel-head">
+            <h3>My account</h3>
+          </div>
+          <div className="panel-body">
+            <div className="hint" style={{ marginBottom: 14 }}>
+              Signed in as <span className="mono">{user?.email}</span> ({user?.role}). Only an admin
+              can change your role or email.
+            </div>
+
+            <label className="field">
+              <span>Display name</span>
+              <input
+                type="text"
+                value={account.name}
+                onChange={(e) => setAccount({ ...account, name: e.target.value })}
+              />
+            </label>
+
+            <div className="section-title" style={{ marginTop: 22 }}>
+              Change password
+            </div>
+            <div className="field-grid">
+              <label className="field">
+                <span>Current password</span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={account.currentPassword}
+                  onChange={(e) => setAccount({ ...account, currentPassword: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>New password</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={account.password}
+                  onChange={(e) => setAccount({ ...account, password: e.target.value })}
+                />
+                <div className="hint">At least 8 characters. Leave blank to keep the current one.</div>
+              </label>
+              <label className="field">
+                <span>Repeat new password</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={account.confirm}
+                  onChange={(e) => setAccount({ ...account, confirm: e.target.value })}
+                />
+              </label>
+            </div>
+
+            <div className="hint" style={{ marginTop: 6 }}>
+              Changing your password signs you out everywhere else. This browser stays signed in.
+            </div>
+
+            <div className="btn-group" style={{ marginTop: 16 }}>
+              <button type="button" className="btn primary" onClick={saveAccount} disabled={savingAccount}>
+                {savingAccount ? <span className="spinner" /> : 'Save my account'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {tab === 'diagnostics' && (

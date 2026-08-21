@@ -296,6 +296,17 @@ was chosen and why, and how to change it where that matters.
 | S8 | A sign-in from a **device not seen before** sends a Telegram alert. "Device" is the IP's /24 (IPv6: the /64 prefix) plus browser and OS — a home connection moves within its block, and an alert on every DHCP lease is an alert that gets ignored. Known devices are silent. |
 | S9 | Failed logins are recorded with the **email that was tried, even when no such account exists** — a run of failures against an unregistered address is what a credential list being tried looks like, and it is invisible if only real users are logged. |
 
+## Roles
+
+| # | Assumption |
+|---|---|
+| R1 | **Two roles, and only two**: `admin` and `user`. An admin sees every account's data; a user sees only records they own. Scoping lives in `middleware/scope.js` — `ownerFilter` for anything carrying `ownerId`, `scopeByCampaign` for clicks, conversions, postbacks and reports, which hang off a campaign rather than owning themselves. It is in one place so a new list endpoint cannot quietly forget it. |
+| R2 | A user **cannot create, list, edit or delete other users**, read the audit log, or change install settings. Those routes are `requireAdmin` and answer 403. |
+| R3 | A user **can change their own name and password**, through `PATCH /users/me` — the only route under `/users` that is not admin-only. It accepts name and password and nothing else: `role`, `active` and `email` are silently ignored there, so it can never become an escalation route. |
+| R4 | Changing your own password requires the **current** one, even though the session already proves who you are. A session can be an unlocked laptop for two minutes; taking the account over permanently should cost more than that. |
+| R5 | A self-service password change **revokes every other session and re-issues this one**. Signing the person out of the tab they are working in teaches them not to bother next time, while leaving other devices signed in defeats the point of changing it. |
+| R6 | The Users tab is **not rendered for non-admins**. It used to be, showing an empty table because the list endpoint refused them — which reads as broken rather than as not theirs. |
+
 ## Sessions
 
 | # | Assumption |

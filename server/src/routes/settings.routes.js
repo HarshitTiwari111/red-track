@@ -9,7 +9,9 @@ import Domain from '../models/Domain.js';
 import config from '../config/env.js';
 import { sendTelegram, telegramEnabled } from '../services/telegram.service.js';
 import { metaRedirectUri } from '../services/meta.service.js';
-import { revokeAllForUser } from '../services/session.service.js';
+import { revokeAllForUser, createSession, REFRESH_TTL_MS } from '../services/session.service.js';
+import { signToken, setAuthCookie, setRefreshCookie } from '../middleware/auth.js';
+import { recordAudit } from '../services/audit.service.js';
 import { newApiKey } from '../utils/ids.js';
 import { str, num, bool, isObjectId, badRequest, notFound, oneOf } from '../utils/validate.js';
 
@@ -194,6 +196,77 @@ router.post(
       apiKey: newApiKey(),
     });
     res.status(201).json(user.toSafeJSON());
+  })
+);
+
+/**
+ * A user editing their own account.
+ *
+ * Everything else under /users is admin-only, which left the ordinary case
+ * with no route at all: someone who wanted to change their own password had to
+ * ask an admin to set one for them and tell them what it was. That is worse
+ * than no policy - it puts a password in a chat window.
+ *
+ * Deliberately narrow. Name and password, nothing else: role, active and email
+ * are not fields a person may change about themselves, and accepting them here
+ * would make this an escalation route. Declared before /users/:id so "me" is
+ * never read as an id.
+ */
+router.patch(
+  '/users/me',
+  asyncRoute(async (req, res) => {
+    const user = await User.findById(req.user.uid);
+    if (!user || !user.active) throw notFound();
+
+    if (req.body?.name !== undefined) user.name = str(req.body.name, 80);
+
+    let changedPassword = false;
+    if (req.body?.password) {
+      const next = String(req.body.password);
+      const current = String(req.body.currentPassword || '');
+
+      /*
+       * The current password is required even though the session already
+       * proves who this is. A session can be a laptop left unlocked for two
+       * minutes; taking it over permanently should cost more than that.
+       */
+      if (!current) throw badRequest('Enter your current password');
+      if (!(await bcrypt.compare(current, user.passwordHash))) {
+        throw badRequest('Current password is not correct');
+      }
+      if (next.length < 8) throw badRequest('Password must be at least 8 characters');
+      if (next === current) throw badRequest('New password must be different');
+
+      user.passwordHash = await bcrypt.hash(next, 10);
+      changedPassword = true;
+    }
+
+    await user.save();
+
+    if (changedPassword) {
+      /*
+       * Sign out everywhere else, then re-issue this browser's session.
+       * Changing a password is how someone reacts to a machine they no longer
+       * trust, so every other session has to end - but logging the person out
+       * of the tab they just used teaches them not to bother next time.
+       */
+      await revokeAllForUser(user._id, 'password changed by owner');
+      setAuthCookie(res, signToken(user));
+      setRefreshCookie(
+        res,
+        await createSession(user, { ip: req.ip, userAgent: req.get('user-agent') }),
+        REFRESH_TTL_MS
+      );
+      recordAudit(req, {
+        action: 'password_changed',
+        entity: 'User',
+        entityId: String(user._id),
+        entityName: user.email,
+        note: 'by the account owner - all other sessions revoked',
+      });
+    }
+
+    res.json({ user: user.toSafeJSON(), signedOutElsewhere: changedPassword });
   })
 );
 
