@@ -296,6 +296,18 @@ was chosen and why, and how to change it where that matters.
 | S8 | A sign-in from a **device not seen before** sends a Telegram alert. "Device" is the IP's /24 (IPv6: the /64 prefix) plus browser and OS — a home connection moves within its block, and an alert on every DHCP lease is an alert that gets ignored. Known devices are silent. |
 | S9 | Failed logins are recorded with the **email that was tried, even when no such account exists** — a run of failures against an unregistered address is what a credential list being tried looks like, and it is invisible if only real users are logged. |
 
+## Sessions
+
+| # | Assumption |
+|---|---|
+| T1 | The access token is a JWT and lasts **15 minutes** (`ACCESS_TOKEN_MINUTES`). Nothing can withdraw a signed JWT, so its lifetime *is* the window a copied one stays useful. The refresh token lasts **7 days** (`REFRESH_TOKEN_DAYS`) and is a row in `sessions`, so revoking it is a write. |
+| T2 | Refresh tokens are stored as a **SHA-256 hash**, never in the clear — same reasoning as passwords, and free, because they are looked up by exact value and never listed. |
+| T3 | Refresh tokens **rotate**: every use issues a new one and revokes the old. Presenting an already-rotated token means a copy exists, and nothing can tell whose, so the **whole family** from that sign-in is revoked and a Telegram alert fires. Both the thief and the owner must sign in again — that is the intended outcome, not a bug. |
+| T4 | The dashboard refreshes **once at a time**. A page fires several requests together and they expire together; without a queue each would refresh, the second would present a token the first had already rotated, and rotation would read that as a replay. The app would log itself out. |
+| T5 | The refresh cookie is scoped to **`/api/v1/auth`**, the access cookie to `/`. There is no reason for the long-lived credential to ride along on every request a dashboard makes. |
+| T6 | Changing a password or deactivating an account **revokes every session that user holds**. Changing a password to lock someone out only works if what they already hold stops working. |
+| T7 | Revoked session rows are kept until they expire rather than deleted, because a revoked token that vanished would be indistinguishable from one that never existed — and that distinction is what reuse detection is. |
+
 ## Deliberately not built
 
 Out of scope for a single-company self-hosted tracker, and not requested:

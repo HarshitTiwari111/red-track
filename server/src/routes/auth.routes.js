@@ -2,7 +2,22 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import User from '../models/User.js';
-import { signToken, setAuthCookie, clearAuthCookie, requireAuth } from '../middleware/auth.js';
+import {
+  signToken,
+  setAuthCookie,
+  setRefreshCookie,
+  clearAuthCookie,
+  requireAuth,
+  REFRESH_COOKIE,
+} from '../middleware/auth.js';
+import {
+  createSession,
+  rotateSession,
+  revokeToken,
+  revokeFamily,
+  REFRESH_TTL_MS,
+} from '../services/session.service.js';
+import { notifyError } from '../services/telegram.service.js';
 import { asyncRoute } from '../middleware/error.js';
 import { MongoRateLimitStore } from '../services/ratelimit.service.js';
 import { recordAudit } from '../services/audit.service.js';
@@ -65,6 +80,12 @@ router.post(
     }
 
     setAuthCookie(res, signToken(user));
+    setRefreshCookie(
+      res,
+      await createSession(user, { ip: req.ip, userAgent: req.get('user-agent') }),
+      REFRESH_TTL_MS
+    );
+
     // Writes the 'login' audit row itself, stamped with the device, and warns
     // the operator if this one has not been seen before. Never awaited.
     noticeSignIn(req, user);
@@ -72,10 +93,71 @@ router.post(
   })
 );
 
-router.post('/logout', (req, res) => {
-  clearAuthCookie(res);
-  res.json({ ok: true });
-});
+/**
+ * Trade the refresh cookie for a fresh pair.
+ *
+ * No requireAuth: the whole point is that the access token has expired. The
+ * refresh cookie is the credential, and it is checked against a row that can
+ * be revoked - which is what an access token can never be.
+ */
+router.post(
+  '/refresh',
+  asyncRoute(async (req, res) => {
+    const presented = req.cookies?.[REFRESH_COOKIE];
+    const result = await rotateSession(presented, {
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    if (!result.ok) {
+      clearAuthCookie(res);
+
+      if (result.reason === 'reused') {
+        /*
+         * Loud on purpose. Every session from that sign-in has just been ended
+         * by rotateSession, and the person it happened to deserves to know why
+         * they were signed out - it is the one signal that a token was copied.
+         */
+        recordAudit(req, {
+          userId: result.userId,
+          action: 'refresh_reuse',
+          entity: 'Session',
+          entityId: String(result.family || ''),
+          note: 'refresh token replayed - all sessions in this family revoked',
+        });
+        notifyError(
+          `⚠️ KAP Tracker: a refresh token was replayed. Every session from that sign-in has been revoked. If this was not a stale browser tab, treat the account as compromised.`
+        );
+        return res.status(401).json({ error: 'Session ended. Please sign in again.', code: 'reused' });
+      }
+
+      return res.status(401).json({ error: 'Authentication required', code: 'unauthenticated' });
+    }
+
+    const user = await User.findById(result.userId);
+    if (!user || !user.active) {
+      // Deactivating an account has to end its sessions, not just its logins
+      await revokeFamily(result.family, 'user inactive');
+      clearAuthCookie(res);
+      return res.status(401).json({ error: 'Authentication required', code: 'unauthenticated' });
+    }
+
+    setAuthCookie(res, signToken(user));
+    setRefreshCookie(res, result.token, REFRESH_TTL_MS);
+    return res.json({ user: user.toSafeJSON() });
+  })
+);
+
+router.post(
+  '/logout',
+  asyncRoute(async (req, res) => {
+    // Clearing the cookie only stops this browser sending it; the row has to
+    // go too, or a copy taken earlier still refreshes.
+    await revokeToken(req.cookies?.[REFRESH_COOKIE], 'logout');
+    clearAuthCookie(res);
+    res.json({ ok: true });
+  })
+);
 
 router.get(
   '/me',

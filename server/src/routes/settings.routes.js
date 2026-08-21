@@ -9,6 +9,7 @@ import Domain from '../models/Domain.js';
 import config from '../config/env.js';
 import { sendTelegram, telegramEnabled } from '../services/telegram.service.js';
 import { metaRedirectUri } from '../services/meta.service.js';
+import { revokeAllForUser } from '../services/session.service.js';
 import { newApiKey } from '../utils/ids.js';
 import { str, num, bool, isObjectId, badRequest, notFound, oneOf } from '../utils/validate.js';
 
@@ -204,14 +205,29 @@ router.patch(
     const user = await User.findById(req.params.id);
     if (!user) throw notFound();
 
+    let endSessions = '';
+
     if (req.body?.password) {
       if (String(req.body.password).length < 8) throw badRequest('Password must be at least 8 characters');
       user.passwordHash = await bcrypt.hash(String(req.body.password), 10);
+      endSessions = 'password changed';
     }
     if (req.body?.name !== undefined) user.name = str(req.body.name, 80);
     if (req.body?.role) user.role = oneOf(str(req.body.role, 16), ['admin', 'user'], user.role);
-    if (req.body?.active !== undefined) user.active = bool(req.body.active, true);
+    if (req.body?.active !== undefined) {
+      user.active = bool(req.body.active, true);
+      if (!user.active) endSessions = 'account deactivated';
+    }
     await user.save();
+
+    /*
+     * Changing a password to lock someone out only works if what they already
+     * hold stops working. Their refresh token would otherwise keep minting
+     * access tokens for another week, which is the whole reason people change
+     * a password in a hurry.
+     */
+    if (endSessions) await revokeAllForUser(user._id, endSessions);
+
     res.json(user.toSafeJSON());
   })
 );

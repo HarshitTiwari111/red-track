@@ -102,6 +102,18 @@ export const config = {
       .filter(Boolean);
     return list.length ? list : ['1.1.1.1', '8.8.8.8'];
   })(),
+  /**
+   * How long an access token is good for, and how long a session survives
+   * without being used.
+   *
+   * The access token cannot be withdrawn once signed, so its lifetime is the
+   * window a copied one stays useful - short by default. The refresh token can
+   * be revoked, so its lifetime is only about how often people re-enter a
+   * password. Both are configurable because "short enough" depends on who can
+   * reach the machine.
+   */
+  accessTokenMinutes: Math.max(1, num(process.env.ACCESS_TOKEN_MINUTES, 15)),
+  refreshTokenDays: Math.max(1, num(process.env.REFRESH_TOKEN_DAYS, 7)),
   isProd: process.env.NODE_ENV === 'production',
   seedAdminEmail: process.env.SEED_ADMIN_EMAIL || 'admin@kaptracker.local',
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD || '',

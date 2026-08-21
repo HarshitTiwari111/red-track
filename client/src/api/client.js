@@ -21,18 +21,50 @@ api.interceptors.request.use((cfg) => {
   return cfg;
 });
 
-// Any 401 outside the login call means the session is gone - bounce to /login.
+/**
+ * Renew an expired access token without the user noticing.
+ *
+ * Access tokens last fifteen minutes now, so a 401 mid-session is the normal
+ * case rather than the end of one. The refresh cookie is exchanged for a fresh
+ * pair and the original request is replayed; only if that fails is the session
+ * really over.
+ *
+ * One refresh at a time. A dashboard page fires several requests at once and
+ * they expire together, so without this every one of them would refresh - and
+ * because refresh tokens rotate, the second would present a token the first
+ * had already replaced, which the server correctly reads as a replay and ends
+ * every session. The queue is not a nicety; without it the app logs itself out.
+ */
+let refreshing = null;
+
+const isAuthCall = (url = '') =>
+  url.includes('/auth/login') || url.includes('/auth/refresh') || url.includes('/auth/logout');
+
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
+  async (err) => {
     const status = err.response?.status;
-    const url = err.config?.url || '';
-    if (status === 401 && !url.includes('/auth/login')) {
-      if (window.location.pathname !== '/login') {
+    const cfg = err.config || {};
+    const url = cfg.url || '';
+
+    if (status !== 401 || isAuthCall(url) || cfg._retried) {
+      if (status === 401 && !isAuthCall(url) && window.location.pathname !== '/login') {
         window.location.replace('/login');
       }
+      return Promise.reject(err);
     }
-    return Promise.reject(err);
+
+    try {
+      refreshing = refreshing || api.post('/auth/refresh').finally(() => {
+        refreshing = null;
+      });
+      await refreshing;
+      cfg._retried = true;
+      return api(cfg);
+    } catch {
+      if (window.location.pathname !== '/login') window.location.replace('/login');
+      return Promise.reject(err);
+    }
   }
 );
 

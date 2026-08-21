@@ -15,6 +15,7 @@ import Domain from '../models/Domain.js';
 import FunnelTemplate from '../models/FunnelTemplate.js';
 import RateLimit from '../models/RateLimit.js';
 import AuditLog from '../models/AuditLog.js';
+import Session from '../models/Session.js';
 
 const MODELS = [
   User,
@@ -35,6 +36,7 @@ const MODELS = [
   FunnelTemplate,
   RateLimit,
   AuditLog,
+  Session,
 ];
 
 const sameKey = (a, b) => JSON.stringify(a) === JSON.stringify(b);
