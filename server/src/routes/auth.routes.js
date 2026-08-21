@@ -10,20 +10,29 @@ import { str } from '../utils/validate.js';
 const router = express.Router();
 
 /*
- * 5 attempts per 10 minutes per IP, as specified - and 5 across the whole
- * install, not 5 per worker. The default store counts in process memory, so
- * every extra instance raised the real limit by another five and a restart
- * cleared it; the counter lives in MongoDB now, where every instance sees the
- * same number.
+ * 5 failed attempts per window per IP - and 5 across the whole install, not 5
+ * per worker. The default store counts in process memory, so every extra
+ * instance raised the real limit by another five and a restart cleared it; the
+ * counter lives in MongoDB now, where every instance sees the same number.
+ *
+ * The window is short on purpose: someone who mistypes their own password
+ * should not be locked out for a coffee break. It is the one number here that
+ * trades safety for patience, so it is written once and read everywhere below
+ * rather than repeated and left to drift.
  */
+const LOGIN_WINDOW_MS = 5 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 5;
+
 const loginLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 5,
+  windowMs: LOGIN_WINDOW_MS,
+  max: LOGIN_MAX_ATTEMPTS,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
-  store: new MongoRateLimitStore({ prefix: 'login', windowMs: 10 * 60 * 1000 }),
-  message: { error: 'Too many login attempts. Try again in 10 minutes.' },
+  store: new MongoRateLimitStore({ prefix: 'login', windowMs: LOGIN_WINDOW_MS }),
+  message: {
+    error: `Too many login attempts. Try again in ${LOGIN_WINDOW_MS / 60000} minutes.`,
+  },
 });
 
 router.post(
