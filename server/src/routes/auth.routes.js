@@ -4,17 +4,25 @@ import rateLimit from 'express-rate-limit';
 import User from '../models/User.js';
 import { signToken, setAuthCookie, clearAuthCookie, requireAuth } from '../middleware/auth.js';
 import { asyncRoute } from '../middleware/error.js';
+import { MongoRateLimitStore } from '../services/ratelimit.service.js';
 import { str } from '../utils/validate.js';
 
 const router = express.Router();
 
-// 5 attempts per 10 minutes per IP, as specified.
+/*
+ * 5 attempts per 10 minutes per IP, as specified - and 5 across the whole
+ * install, not 5 per worker. The default store counts in process memory, so
+ * every extra instance raised the real limit by another five and a restart
+ * cleared it; the counter lives in MongoDB now, where every instance sees the
+ * same number.
+ */
 const loginLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
+  store: new MongoRateLimitStore({ prefix: 'login', windowMs: 10 * 60 * 1000 }),
   message: { error: 'Too many login attempts. Try again in 10 minutes.' },
 });
 
